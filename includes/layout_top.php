@@ -8,7 +8,7 @@ $__me = currentUser();
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>سامانه نظارت خبرگزاری دانشجویان ایران (ایسنا)</title>
+<title>سامانه نظارت و ارزیابی خبرگزاری دانشجویان ا یران (ایسنا)</title>
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/vazirmatn@33.0.3/Vazirmatn-font-face.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -73,7 +73,7 @@ body{
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark app-navbar mb-4">
   <div class="container">
-    <a class="navbar-brand" href="index.php">سامانه نظارت خبرگزاری دانشجویان ایران (ایسنا)</a>
+    <a class="navbar-brand" href="index.php">سامانه نظارت و ارزیابی خبرگزاری دانشجویان ایران (ایسنا)</a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav1">
       <span class="navbar-toggler-icon"></span>
     </button>

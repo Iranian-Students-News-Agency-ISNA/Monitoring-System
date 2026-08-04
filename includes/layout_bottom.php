@@ -1,7 +1,7 @@
 </div>
 <footer class="app-footer py-3 mt-4">
   <div class="container d-flex flex-wrap justify-content-between align-items-center gap-2">
-    <small>سامانه نظارت خبرگزاری دانشجویان ایران (ایسنا) &mdash; نسخه <?= htmlspecialchars(APP_VERSION) ?></small>
+    <small>سامانه نظارت و ارزیابی خبرگزاری دانشجویان ایران (ایسنا) &mdash; نسخه <?= htmlspecialchars(APP_VERSION) ?></small>
     <small>توسعه‌دهنده: <?= htmlspecialchars(APP_DEVELOPER) ?></small>
   </div>
 </footer>
