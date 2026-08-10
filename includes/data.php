@@ -408,6 +408,26 @@ function typeAvgViewsTable(array $rows): array
     return $out;
 }
 
+// برای هر نوع خبر، خبرنگاری که بیشترین تعداد را در آن نوع داشته
+function typeTopReporterPie(array $rows): array
+{
+    $agg = [];
+    foreach ($rows as $r) {
+        $t = trim((string)($r['news_type'] ?? '')) ?: 'نامشخص';
+        $rep = trim((string)($r['reporter'] ?? '')) ?: 'نامشخص';
+        if (!isset($agg[$t])) $agg[$t] = [];
+        $agg[$t][$rep] = ($agg[$t][$rep] ?? 0) + 1;
+    }
+    $out = [];
+    foreach ($agg as $type => $reps) {
+        arsort($reps);
+        $topReporter = array_key_first($reps);
+        $out[] = ['type' => $type, 'reporter' => $topReporter, 'count' => $reps[$topReporter]];
+    }
+    usort($out, fn($a, $b) => $b['count'] <=> $a['count']);
+    return $out;
+}
+
 function buildHourlySeries(array $rows): array
 {
     $buckets = [];
