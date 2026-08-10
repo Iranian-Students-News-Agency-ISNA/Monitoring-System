@@ -46,10 +46,12 @@ require __DIR__ . '/includes/layout_top.php';
       </div>
     </div>
     <div class="row g-2 mb-3">
-      <div class="col-sm-3"><div class="p-2 bg-light rounded text-center">تعداد کل اخبار<br><strong id="ovcTotalAll">-</strong></div></div>
-      <div class="col-sm-3"><div class="p-2 bg-light rounded text-center">تعداد اخبار سرویس انتخابی<br><strong id="ovcTotalScope">-</strong></div></div>
-      <div class="col-sm-3"><div class="p-2 bg-light rounded text-center">سهم از کل<br><strong id="ovcShare">-</strong></div></div>
-      <div class="col-sm-3"><div class="p-2 bg-light rounded text-center">میانگین بازدید<br><strong id="ovcAvgViews">-</strong></div></div>
+      <div class="col-sm-2"><div class="p-2 bg-light rounded text-center">تعداد کل اخبار<br><strong id="ovcTotalAll">-</strong></div></div>
+      <div class="col-sm-2"><div class="p-2 bg-light rounded text-center">تعداد اخبار سرویس انتخابی<br><strong id="ovcTotalScope">-</strong></div></div>
+      <div class="col-sm-2"><div class="p-2 bg-light rounded text-center">سهم از کل<br><strong id="ovcShare">-</strong></div></div>
+      <div class="col-sm-2"><div class="p-2 bg-light rounded text-center">میانگین بازدید<br><strong id="ovcAvgViews">-</strong></div></div>
+      <div class="col-sm-2"><div class="p-2 bg-light rounded text-center">مجموع بازدید<br><strong id="ovcSumViews">-</strong></div></div>
+      <div class="col-sm-2"><div class="p-2 bg-light rounded text-center">سهم از بازدید کل<br><strong id="ovcViewsShare">-</strong></div></div>
     </div>
     <canvas id="svcChart" height="90"></canvas>
     <div class="row g-4 mt-1">
@@ -65,6 +67,10 @@ require __DIR__ . '/includes/layout_top.php';
             <tbody id="typeAvgViewsTable"></tbody>
           </table>
         </div>
+      </div>
+      <div class="col-md-5">
+        <h6 class="mb-2">پرکارترین خبرنگار در هر نوع خبر</h6>
+        <canvas id="reporterTypePie" height="220"></canvas>
       </div>
     </div>
     <hr class="my-4">
@@ -247,7 +253,7 @@ require __DIR__ . '/includes/layout_top.php';
 
 <script>
 const API = 'evaluation_api.php';
-let svcChart=null, hourlyChart=null, subChart=null, repChart=null, pubChart=null, typePieChart=null;
+let svcChart=null, hourlyChart=null, subChart=null, repChart=null, pubChart=null, typePieChart=null, reporterTypePieChart=null;
 let qcCoverageChart=null, qcMatchChart=null, qcElementsChart=null;
 const PALETTE = ['#123a73','#1f5aa8','#e0a800','#c0392b','#16a085','#8e44ad','#d35400','#2c3e50','#27ae60','#7f8c8d','#e67e22','#2980b9','#c2185b'];
 
@@ -353,11 +359,15 @@ async function loadOverview(){
   qs('ovcTotalScope').textContent = data.total_scope;
   qs('ovcShare').textContent = data.share_percent === null ? '۱۰۰٪' : data.share_percent + '%';
   qs('ovcAvgViews').textContent = data.avg_views;
+  qs('ovcSumViews').textContent = data.sum_views.toLocaleString();
+  qs('ovcViewsShare').textContent = data.sum_views_share_percent === null ? '۱۰۰٪' : data.sum_views_share_percent + '%';
   if (svcChart) svcChart.destroy();
   svcChart = makeComboChart('svcChart', data.series, 'تعداد اخبار', 'میانگین بازدید');
   if (typePieChart) typePieChart.destroy();
   typePieChart = makePieChart('typePie', data.type_pie);
   renderAvgViewsTable(qs('typeAvgViewsTable'), data.type_avg_views);
+  if (reporterTypePieChart) reporterTypePieChart.destroy();
+  reporterTypePieChart = makeLabeledPieChart('reporterTypePie', data.type_top_reporter_pie.map(it => ({ label: `${it.type} — ${it.reporter}`, count: it.count })));
 }
 
 async function loadHourly(){

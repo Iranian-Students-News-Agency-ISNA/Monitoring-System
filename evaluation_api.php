@@ -60,15 +60,19 @@ switch ($action) {
         $totalAll = count($allRows);
         $totalScope = count($scopeRows);
         $sumViews = array_sum(array_column($scopeRows, 'views'));
+        $sumViewsAll = array_sum(array_column($allRows, 'views'));
         echo json_encode([
             'ok' => true,
             'total_all'      => $totalAll,
             'total_scope'    => $totalScope,
             'share_percent'  => ($service !== '' && $totalAll > 0) ? round($totalScope * 100 / $totalAll, 1) : null,
             'avg_views'      => $totalScope > 0 ? round($sumViews / $totalScope, 1) : 0,
+            'sum_views'      => $sumViews,
+            'sum_views_share_percent' => ($service !== '' && $sumViewsAll > 0) ? round($sumViews * 100 / $sumViewsAll, 1) : null,
             'series'         => buildSeries($scopeRows, $granularity),
             'type_pie'       => typeBreakdownTable($scopeRows),
             'type_avg_views' => typeAvgViewsTable($scopeRows),
+            'type_top_reporter_pie' => typeTopReporterPie($scopeRows),
         ], JSON_UNESCAPED_UNICODE);
         break;
 
