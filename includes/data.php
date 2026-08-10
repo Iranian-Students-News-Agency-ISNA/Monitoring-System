@@ -318,6 +318,7 @@ function rowsInRange(string $from, string $to, string $service = '', string $rol
         if (!isset($activeFileIds[(int)($r['file_id'] ?? 0)])) continue;
         $d = trim((string)($r['date'] ?? ''));
         if ($d === '' || $d < $from || $d > $to) continue;
+        if (trim((string)($r['title'] ?? '')) === '') continue;
         if ($service !== '' && ($r['service_main'] ?? '') !== $service) continue;
         if ($subservice !== '' && ($r['service_sub'] ?? '') !== $subservice) continue;
         if ($role !== '' && $name !== '') {
