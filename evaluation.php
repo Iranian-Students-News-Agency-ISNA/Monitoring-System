@@ -5,6 +5,9 @@ requireLoginPage();
 $today = todayJalali();
 require __DIR__ . '/includes/layout_top.php';
 ?>
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+<style>.ts-wrapper .ts-control{min-height:calc(1.5em + .75rem + 2px);}</style>
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <h5 class="mb-0">ارزیابی</h5>
   <a href="backfill_views.php" class="btn btn-outline-secondary btn-sm">به‌روزرسانی بازدید داده‌های قدیمی</a>
@@ -269,6 +272,15 @@ async function fetchJson(params){
 
 function fillSelect(sel, items, placeholder, keepValue){
   const prev = keepValue ? sel.value : null;
+  if (sel.tomselect){
+    const ts = sel.tomselect;
+    ts.clearOptions();
+    ts.addOption({value:'', text: placeholder});
+    items.forEach(v => ts.addOption({value:v, text:v}));
+    ts.refreshOptions(false);
+    ts.setValue((prev && items.includes(prev)) ? prev : '', true);
+    return;
+  }
   sel.innerHTML = '<option value="">' + placeholder + '</option>';
   items.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o); });
   if (prev && items.includes(prev)) sel.value = prev;
@@ -586,6 +598,26 @@ qs('pubType').addEventListener('change', () => loadPersonSection('publisher'));
 qs('qcSubservice').addEventListener('change', loadQcSection);
 qs('qcReporter').addEventListener('change', loadQcSection);
 qs('qcNewsType').addEventListener('change', loadQcSection);
+
+function attachSelectSearch(selectId){
+  const sel = qs(selectId);
+  if (!sel || sel.tomselect) return;
+  new TomSelect(sel, {
+    create: false,
+    maxOptions: 1000,
+    allowEmptyOption: true,
+    onChange: function(){ sel.dispatchEvent(new Event('change')); },
+    score: function(search){
+      const words = search.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      return function(item){
+        const text = (item.text || '').toLowerCase();
+        return words.length === 0 || words.some(w => text.includes(w)) ? 1 : 0;
+      };
+    }
+  });
+}
+['hourlyType','subName','subType','topType','topSubservice','repName','repType','pubName','pubType','qcSubservice','qcReporter','qcNewsType']
+  .forEach(attachSelectSearch);
 
 document.addEventListener('DOMContentLoaded', fullReload);
 </script>
