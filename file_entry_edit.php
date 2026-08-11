@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'reporter'            => trim((string)$excelRow['reporter']),
         'news_id'             => $code,
         'news_link'           => trim((string)($excelRow['news_link'] ?? '')),
+        'site'                => trim((string)($excelRow['site'] ?? '')),
         'publisher'           => trim((string)($excelRow['publisher'] ?? '')),
         'title'               => trim((string)($excelRow['title'] ?? '')),
         'news_type'           => trim((string)($excelRow['news_type'] ?? '')),
