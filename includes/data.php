@@ -309,7 +309,7 @@ function newsEntriesFilter(string $reporter, string $from, string $to, string $s
 // ===================== ارزیابی: آمار عملکرد سرویس‌ها (بر پایه excel_rows، شامل بازدید) =====================
 // این توابع از پروژه «ایسنا» پورت شده‌اند و روی همان excel_rows نسخه نظارت کار می‌کنند.
 
-function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = ''): array
+function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = ''): array
 {
     $activeFileIds = excelActiveFileIds();
     if (empty($activeFileIds)) return [];
@@ -319,6 +319,7 @@ function rowsInRange(string $from, string $to, string $service = '', string $rol
         $d = trim((string)($r['date'] ?? ''));
         if ($d === '' || $d < $from || $d > $to) continue;
         if (trim((string)($r['title'] ?? '')) === '') continue;
+        if ($site !== '' && ($r['site'] ?? '') !== $site) continue;
         if ($service !== '' && ($r['service_main'] ?? '') !== $service) continue;
         if ($subservice !== '' && ($r['service_sub'] ?? '') !== $subservice) continue;
         if ($role !== '' && $name !== '') {
@@ -331,10 +332,10 @@ function rowsInRange(string $from, string $to, string $service = '', string $rol
     return $out;
 }
 
-function distinctValuesInRange(string $from, string $to, string $field, string $service = ''): array
+function distinctValuesInRange(string $from, string $to, string $field, string $service = '', string $site = ''): array
 {
     $set = [];
-    foreach (rowsInRange($from, $to, $service) as $r) {
+    foreach (rowsInRange($from, $to, $service, '', '', '', '', $site) as $r) {
         $v = trim((string)($r[$field] ?? ''));
         if ($v !== '') $set[$v] = true;
     }
@@ -465,11 +466,12 @@ function topViewedNews(array $rows, int $limit): array
 // ===================== ارزیابی: بررسی کیفی (بر پایه news_entries نظارت) =====================
 
 // ردیف‌های نظارت (news_entries) در یک بازه، با فیلتر سرویس/زیرسرویس/خبرنگار/نوع خبر
-function newsEntriesInRange(string $from, string $to, string $service = '', string $subservice = '', string $reporter = '', string $newsType = ''): array
+function newsEntriesInRange(string $from, string $to, string $service = '', string $subservice = '', string $reporter = '', string $newsType = '', string $site = ''): array
 {
-    $out = array_values(array_filter(jsonRead('news_entries'), function ($r) use ($from, $to, $service, $subservice, $reporter, $newsType) {
+    $out = array_values(array_filter(jsonRead('news_entries'), function ($r) use ($from, $to, $service, $subservice, $reporter, $newsType, $site) {
         $d = $r['entry_date'] ?? '';
         if ($d === '' || $d < $from || $d > $to) return false;
+        if ($site !== '' && ($r['site'] ?? '') !== $site) return false;
         if ($service !== '' && ($r['service_main'] ?? '') !== $service) return false;
         if ($subservice !== '' && ($r['service_sub'] ?? '') !== $subservice) return false;
         if ($reporter !== '' && ($r['reporter'] ?? '') !== $reporter) return false;

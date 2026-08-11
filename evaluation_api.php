@@ -9,6 +9,7 @@ header('Content-Type: application/json; charset=utf-8');
 $action = $_GET['action'] ?? '';
 $from = normalizeJalaliDate($_GET['from'] ?? '') ?? '';
 $to   = normalizeJalaliDate($_GET['to'] ?? '') ?? '';
+$site        = trim($_GET['site'] ?? '');
 $service     = trim($_GET['service'] ?? '');
 $subservice  = trim($_GET['subservice'] ?? '');
 $granularity = ($_GET['granularity'] ?? 'day') === 'month' ? 'month' : 'day';
@@ -29,21 +30,25 @@ switch ($action) {
 
     // ===== آمار عملکرد سرویس‌ها (پورت‌شده از ایسنا) =====
 
+    case 'sites':
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'site')], JSON_UNESCAPED_UNICODE);
+        break;
+
     case 'services':
-        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_main')], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_main', '', $site)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'news_types':
-        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'news_type', $service)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'news_type', $service, $site)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'subservices':
         if ($service === '') { echo json_encode(['ok' => false, 'error' => 'ابتدا یک سرویس مشخص انتخاب کنید.'], JSON_UNESCAPED_UNICODE); break; }
-        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_sub', $service)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_sub', $service, $site)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'persons':
-        $rows = rowsInRange($from, $to, $service);
+        $rows = rowsInRange($from, $to, $service, '', '', '', '', $site);
         $field = $role === 'publisher' ? 'publisher' : 'reporter';
         $list = [];
         foreach ($rows as $r) {
@@ -55,8 +60,8 @@ switch ($action) {
         break;
 
     case 'overview':
-        $allRows = rowsInRange($from, $to);
-        $scopeRows = $service !== '' ? rowsInRange($from, $to, $service) : $allRows;
+        $allRows = rowsInRange($from, $to, '', '', '', '', '', $site);
+        $scopeRows = $service !== '' ? rowsInRange($from, $to, $service, '', '', '', '', $site) : $allRows;
         $totalAll = count($allRows);
         $totalScope = count($scopeRows);
         $sumViews = array_sum(array_column($scopeRows, 'views'));
@@ -77,13 +82,13 @@ switch ($action) {
         break;
 
     case 'hourly':
-        $rows = rowsInRange($from, $to, $service, '', '', $newsType);
+        $rows = rowsInRange($from, $to, $service, '', '', $newsType, '', $site);
         echo json_encode(['ok' => true, 'series' => buildHourlySeries($rows)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'subservice_series':
         if ($service === '' || $subservice === '') { echo json_encode(['ok' => false, 'error' => 'سرویس یا زیرسرویس انتخاب نشده است.'], JSON_UNESCAPED_UNICODE); break; }
-        $allRows = rowsInRange($from, $to, $service, '', '', '', $subservice);
+        $allRows = rowsInRange($from, $to, $service, '', '', '', $subservice, $site);
         $chartRows = $newsType !== '' ? array_values(array_filter($allRows, fn($r) => ($r['news_type'] ?? '') === $newsType)) : $allRows;
         echo json_encode([
             'ok' => true,
@@ -96,7 +101,7 @@ switch ($action) {
 
     case 'person_series':
         if ($name === '') { echo json_encode(['ok' => false, 'error' => 'نامی انتخاب نشده است.'], JSON_UNESCAPED_UNICODE); break; }
-        $allRows = rowsInRange($from, $to, $service, $role, $name);
+        $allRows = rowsInRange($from, $to, $service, $role, $name, '', '', $site);
         $chartRows = $newsType !== '' ? array_values(array_filter($allRows, fn($r) => ($r['news_type'] ?? '') === $newsType)) : $allRows;
         echo json_encode([
             'ok' => true,
@@ -108,7 +113,7 @@ switch ($action) {
         break;
 
     case 'top_news':
-        $rows = rowsInRange($from, $to, $service, '', '', $newsType, $subservice);
+        $rows = rowsInRange($from, $to, $service, '', '', $newsType, $subservice, $site);
         echo json_encode(['ok' => true, 'items' => topViewedNews($rows, $limit)], JSON_UNESCAPED_UNICODE);
         break;
 
@@ -116,7 +121,7 @@ switch ($action) {
 
     case 'qc_reporters':
         $set = [];
-        foreach (newsEntriesInRange($from, $to, $service) as $r) {
+        foreach (newsEntriesInRange($from, $to, $service, '', '', '', $site) as $r) {
             $v = trim((string)($r['reporter'] ?? ''));
             if ($v !== '') $set[$v] = true;
         }
@@ -127,7 +132,7 @@ switch ($action) {
 
     case 'qc_news_types':
         $set = [];
-        foreach (newsEntriesInRange($from, $to, $service) as $r) {
+        foreach (newsEntriesInRange($from, $to, $service, '', '', '', $site) as $r) {
             $v = trim((string)($r['news_type'] ?? ''));
             if ($v !== '') $set[$v] = true;
         }
@@ -137,8 +142,8 @@ switch ($action) {
         break;
 
     case 'qc_summary':
-        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType);
-        $totalRows = rowsInRange($from, $to, $service, $reporter !== '' ? 'reporter' : '', $reporter, $newsType, $subservice);
+        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site);
+        $totalRows = rowsInRange($from, $to, $service, $reporter !== '' ? 'reporter' : '', $reporter, $newsType, $subservice, $site);
         $reviewedCount = count($reviewed);
         $totalCount = count($totalRows);
         echo json_encode([
@@ -150,11 +155,12 @@ switch ($action) {
         break;
 
     case 'qc_items':
-        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType);
+        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site);
         $items = [];
         foreach ($reviewed as $r) {
             $items[] = [
                 'title'          => $r['title'] ?? '',
+                'site'           => $r['site'] ?? '',
                 'service_main'   => $r['service_main'] ?? '',
                 'service_sub'    => $r['service_sub'] ?? '',
                 'news_type'      => $r['news_type'] ?? '',
@@ -170,7 +176,7 @@ switch ($action) {
         break;
 
     case 'qc_match':
-        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType);
+        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site);
         $match = 0; $mismatch = 0; $incomplete = 0;
         foreach ($reviewed as $r) {
             $nt = trim((string)($r['news_type'] ?? ''));
@@ -186,7 +192,7 @@ switch ($action) {
         break;
 
     case 'qc_elements':
-        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType);
+        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site);
         $counts = ['رعایت شده است' => 0, 'رعایت نشده است' => 0, 'سایر' => 0, 'ثبت نشده' => 0];
         foreach ($reviewed as $r) { $counts[newsElementsStatus($r)]++; }
         $items = [];
