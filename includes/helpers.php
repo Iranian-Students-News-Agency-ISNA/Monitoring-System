@@ -311,6 +311,7 @@ function parseExcelRows(string $path): array
         $hn = mb_strtolower($h);
         if ($h === 'خبرنگار') { $assign($idx, 'reporter'); continue; }
         if (str_starts_with($hn, 'کد')) { $assign($idx, 'code'); continue; } // نه 'کلیدواژه'
+        if (str_contains($hn, 'سایت')) { $assign($idx, 'site'); continue; }
         if (str_contains($hn, 'ناشر')) { $assign($idx, 'publisher'); continue; }
         if (str_contains($hn, 'تیتر') || str_contains($hn, 'عنوان')) { $assign($idx, 'title'); continue; }
         if (str_contains($hn, 'نوع')) { $assign($idx, 'news_type'); continue; }
@@ -327,7 +328,7 @@ function parseExcelRows(string $path): array
     for ($r = 1; $r < count($sheet); $r++) {
         $line = $sheet[$r];
         if (empty(array_filter($line, fn($c) => trim((string)$c) !== ''))) continue;
-        $row = ['code' => '', 'publisher' => '', 'title' => '', 'news_type' => '', 'reporter' => '',
+        $row = ['code' => '', 'site' => '', 'publisher' => '', 'title' => '', 'news_type' => '', 'reporter' => '',
                 'service_main' => '', 'service_sub' => '', 'date' => '', 'pub_time' => '', 'views' => 0,
                 'news_link' => '', 'source' => ''];
         foreach ($map as $idx => $key) {
