@@ -34,6 +34,7 @@ $data = [
     'reporter'            => $reporter,
     'news_id'             => $newsId,
     'news_link'           => trim((string)($in['news_link'] ?? '')),
+    'site'                => trim((string)($excelRow['site'] ?? ($in['site'] ?? ''))),
     'publisher'           => trim((string)($in['publisher'] ?? '')),
     'title'               => trim((string)($in['title'] ?? '')),
     'news_type'           => trim((string)($in['news_type'] ?? '')),
