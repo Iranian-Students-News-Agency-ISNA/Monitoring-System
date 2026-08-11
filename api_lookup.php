@@ -20,6 +20,7 @@ $fallback = isnaInfoFromId($code);
 $out = [
     'ok'              => true,
     'found_in_excel'  => $excelRow !== null,
+    'site'            => $excelRow['site'] ?? '',
     'reporter'        => $excelRow['reporter'] ?? '',
     'publisher'       => $excelRow['publisher'] ?? '',
     'title'           => $excelRow['title'] ?? '',
