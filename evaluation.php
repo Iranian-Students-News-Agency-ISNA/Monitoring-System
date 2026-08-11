@@ -10,7 +10,10 @@ require __DIR__ . '/includes/layout_top.php';
 <style>.ts-wrapper .ts-control{min-height:calc(1.5em + .75rem + 2px);}</style>
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <h5 class="mb-0">ارزیابی</h5>
-  <a href="backfill_views.php" class="btn btn-outline-secondary btn-sm">به‌روزرسانی بازدید داده‌های قدیمی</a>
+  <div class="d-flex flex-wrap gap-2">
+    <a href="backfill_views.php" class="btn btn-outline-secondary btn-sm">به‌روزرسانی بازدید داده‌های قدیمی</a>
+    <a href="backfill_site.php" class="btn btn-outline-secondary btn-sm">به‌روزرسانی زبان/سایت داده‌های قدیمی</a>
+  </div>
 </div>
 
 <div class="card shadow-sm p-4 mb-4">
@@ -41,8 +44,15 @@ require __DIR__ . '/includes/layout_top.php';
 
   <!-- آمار کلی -->
   <div class="card shadow-sm p-4 mb-4">
-    <div class="row g-3 align-items-end mb-3">
+    <div class="row g-3 align-items-end mb-2">
       <div class="col-md-6"><h6 class="mb-0">آمار کلی</h6></div>
+      <div class="col-md-6">
+        <label class="form-label">زبان</label>
+        <select id="ovcSite" class="form-select"><option value="">همه</option></select>
+      </div>
+    </div>
+    <div class="row g-3 align-items-end mb-3">
+      <div class="col-md-6"></div>
       <div class="col-md-6">
         <label class="form-label">سرویس</label>
         <select id="ovcService" class="form-select"><option value="">همه سرویس‌ها (کل ایسنا)</option></select>
@@ -263,6 +273,7 @@ const PALETTE = ['#123a73','#1f5aa8','#e0a800','#c0392b','#16a085','#8e44ad','#d
 function qs(id){ return document.getElementById(id); }
 function currentRange(){ return { from: qs('fFrom').value.trim(), to: qs('fTo').value.trim(), granularity: qs('fGranularity').value }; }
 function currentService(){ return qs('ovcService').value; }
+function currentSite(){ return qs('ovcSite').value; }
 
 async function fetchJson(params){
   const url = API + '?' + new URLSearchParams(params).toString();
@@ -354,9 +365,18 @@ function renderTopNewsTable(items){
 
 // ===================== آمار کلی =====================
 
+async function loadSiteOptions(){
+  const {from, to} = currentRange();
+  const data = await fetchJson({action:'sites', from, to});
+  const sel = qs('ovcSite');
+  sel.innerHTML = '<option value="">همه</option>';
+  if (data.ok) data.items.forEach(v => { const o = document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
+}
+
 async function loadServiceOptions(){
   const {from, to} = currentRange();
-  const data = await fetchJson({action:'services', from, to});
+  const site = currentSite();
+  const data = await fetchJson({action:'services', from, to, site});
   const sel = qs('ovcService');
   sel.innerHTML = '<option value="">همه سرویس‌ها (کل ایسنا)</option>';
   if (data.ok) data.items.forEach(v => { const o = document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); });
@@ -365,7 +385,8 @@ async function loadServiceOptions(){
 async function loadOverview(){
   const {from, to, granularity} = currentRange();
   const service = currentService();
-  const data = await fetchJson({action:'overview', from, to, service, granularity});
+  const site = currentSite();
+  const data = await fetchJson({action:'overview', from, to, service, granularity, site});
   if (!data.ok) return;
   qs('ovcTotalAll').textContent = data.total_all;
   qs('ovcTotalScope').textContent = data.total_scope;
@@ -385,8 +406,9 @@ async function loadOverview(){
 async function loadHourly(){
   const {from, to} = currentRange();
   const service = currentService();
+  const site = currentSite();
   const newsType = qs('hourlyType').value;
-  const data = await fetchJson({action:'hourly', from, to, service, news_type:newsType});
+  const data = await fetchJson({action:'hourly', from, to, service, news_type:newsType, site});
   if (!data.ok) return;
   if (hourlyChart) hourlyChart.destroy();
   hourlyChart = makeComboChart('hourlyChart', data.series, 'تعداد اخبار', 'میانگین بازدید');
@@ -404,17 +426,19 @@ async function loadSubserviceOptions(){
   qs('subNeedService').style.display='none'; qs('subSelectors').style.display='';
   qs('subEmpty').style.display=''; qs('subBody').style.display='none';
   const {from, to} = currentRange();
-  const data = await fetchJson({action:'subservices', from, to, service});
+  const site = currentSite();
+  const data = await fetchJson({action:'subservices', from, to, service, site});
   if (data.ok) fillSelect(qs('subName'), data.items, '— انتخاب کنید —');
 }
 
 async function loadSubserviceChart(){
   const {from, to, granularity} = currentRange();
   const service = currentService();
+  const site = currentSite();
   const subservice = qs('subName').value;
   const newsType = qs('subType').value;
   if (!subservice){ qs('subBody').style.display='none'; qs('subEmpty').style.display=''; return; }
-  const data = await fetchJson({action:'subservice_series', from, to, service, subservice, granularity, news_type:newsType});
+  const data = await fetchJson({action:'subservice_series', from, to, service, subservice, granularity, news_type:newsType, site});
   if (!data.ok) return;
   qs('subEmpty').style.display='none'; qs('subBody').style.display='';
   qs('subTotalCount').textContent = data.total_count;
@@ -428,19 +452,21 @@ async function loadSubserviceChart(){
 
 async function loadTopSubserviceOptions(){
   const service = currentService();
+  const site = currentSite();
   const {from, to} = currentRange();
   if (!service){ fillSelect(qs('topSubservice'), [], 'همه زیرسرویس‌ها'); return; }
-  const data = await fetchJson({action:'subservices', from, to, service});
+  const data = await fetchJson({action:'subservices', from, to, service, site});
   if (data.ok) fillSelect(qs('topSubservice'), data.items, 'همه زیرسرویس‌ها');
 }
 
 async function loadTopNews(){
   const {from, to} = currentRange();
   const service = currentService();
+  const site = currentSite();
   const limit = qs('topLimit').value;
   const newsType = qs('topType').value;
   const subservice = qs('topSubservice').value;
-  const data = await fetchJson({action:'top_news', from, to, service, limit, news_type:newsType, subservice});
+  const data = await fetchJson({action:'top_news', from, to, service, limit, news_type:newsType, subservice, site});
   if (data.ok) renderTopNewsTable(data.items);
 }
 
@@ -449,7 +475,8 @@ async function loadTopNews(){
 async function loadPersonOptions(role){
   const {from, to} = currentRange();
   const service = currentService();
-  const data = await fetchJson({action:'persons', from, to, service, role});
+  const site = currentSite();
+  const data = await fetchJson({action:'persons', from, to, service, role, site});
   const sel = role === 'reporter' ? qs('repName') : qs('pubName');
   if (data.ok) fillSelect(sel, data.items, '— انتخاب کنید —');
   if (role === 'reporter'){ qs('repBody').style.display='none'; qs('repEmpty').style.display=''; }
@@ -459,13 +486,14 @@ async function loadPersonOptions(role){
 async function loadPersonSection(role){
   const {from, to, granularity} = currentRange();
   const service = currentService();
+  const site = currentSite();
   const nameSel = role === 'reporter' ? qs('repName') : qs('pubName');
   const typeSel = role === 'reporter' ? qs('repType') : qs('pubType');
   const name = nameSel.value; const newsType = typeSel.value;
   const bodyEl = role === 'reporter' ? qs('repBody') : qs('pubBody');
   const emptyEl = role === 'reporter' ? qs('repEmpty') : qs('pubEmpty');
   if (!name){ bodyEl.style.display='none'; emptyEl.style.display=''; return; }
-  const data = await fetchJson({action:'person_series', from, to, service, role, name, granularity, news_type:newsType});
+  const data = await fetchJson({action:'person_series', from, to, service, role, name, granularity, news_type:newsType, site});
   if (!data.ok) return;
   emptyEl.style.display='none'; bodyEl.style.display='';
   if (role === 'reporter'){
@@ -486,10 +514,11 @@ async function loadPersonSection(role){
 async function loadQcOptions(){
   const {from, to} = currentRange();
   const service = currentService();
+  const site = currentSite();
   const [subRes, repRes, typeRes] = await Promise.all([
-    service ? fetchJson({action:'subservices', from, to, service}) : Promise.resolve({ok:false, items:[]}),
-    fetchJson({action:'qc_reporters', from, to, service}),
-    fetchJson({action:'qc_news_types', from, to, service}),
+    service ? fetchJson({action:'subservices', from, to, service, site}) : Promise.resolve({ok:false, items:[]}),
+    fetchJson({action:'qc_reporters', from, to, service, site}),
+    fetchJson({action:'qc_news_types', from, to, service, site}),
   ]);
   fillSelect(qs('qcSubservice'), subRes.ok ? subRes.items : [], 'همه زیرسرویس‌ها');
   fillSelect(qs('qcReporter'), repRes.ok ? repRes.items : [], 'همه خبرنگاران');
@@ -510,10 +539,11 @@ function renderQcItemsTable(items){
 async function loadQcSection(){
   const {from, to} = currentRange();
   const service = currentService();
+  const site = currentSite();
   const subservice = qs('qcSubservice').value;
   const reporter = qs('qcReporter').value;
   const newsType = qs('qcNewsType').value;
-  const params = {from, to, service, subservice, reporter, news_type:newsType};
+  const params = {from, to, service, subservice, reporter, news_type:newsType, site};
 
   const [summary, items, match, elements] = await Promise.all([
     fetchJson({action:'qc_summary', ...params}),
@@ -549,7 +579,8 @@ async function loadQcSection(){
 async function loadNewsTypeOptionsForScope(){
   const {from, to} = currentRange();
   const service = currentService();
-  const data = await fetchJson({action:'news_types', from, to, service});
+  const site = currentSite();
+  const data = await fetchJson({action:'news_types', from, to, service, site});
   if (!data.ok) return;
   [qs('hourlyType'), qs('repType'), qs('pubType'), qs('subType'), qs('topType')].forEach(sel => { fillSelect(sel, data.items, 'همه انواع خبر'); });
 }
@@ -564,10 +595,16 @@ async function refreshScope(){
   ]);
 }
 
+async function onSiteChange(){
+  await loadServiceOptions();
+  await refreshScope();
+}
+
 async function fullReload(){
   const {from, to} = currentRange();
   if (!from || !to){ qs('filterMsg').textContent = 'لطفاً بازه تاریخ را انتخاب کنید.'; return; }
   qs('filterMsg').textContent = '';
+  await loadSiteOptions();
   await loadServiceOptions();
   await refreshScope();
 }
@@ -575,6 +612,7 @@ async function fullReload(){
 qs('btnLoad').addEventListener('click', fullReload);
 qs('fFrom').addEventListener('change', fullReload);
 qs('fTo').addEventListener('change', fullReload);
+qs('ovcSite').addEventListener('change', onSiteChange);
 qs('ovcService').addEventListener('change', refreshScope);
 
 qs('fGranularity').addEventListener('change', () => {
