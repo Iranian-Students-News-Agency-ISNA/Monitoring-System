@@ -410,13 +410,23 @@ function typeAvgViewsTable(array $rows): array
     return $out;
 }
 
-// برای هر نوع خبر، خبرنگاری که بیشترین تعداد را در آن نوع داشته
+// آیا مقدار وارد شده یک نام واقعی خبرنگار محسوب می‌شود؟ (خالی یا فقط خط‌تیره/نامشخص در نظر گرفته نمی‌شود)
+function isValidReporterName(string $rep): bool
+{
+    $rep = trim($rep);
+    if ($rep === '' || $rep === 'نامشخص') return false;
+    // اگر هیچ حرف یا رقمی نداشته باشد (مثلاً فقط «-»)، نام معتبر نیست
+    return (bool)preg_match('/[\p{L}\p{N}]/u', $rep);
+}
+
+// برای هر نوع خبر، خبرنگاری که بیشترین تعداد را در آن نوع داشته (خبرنگارهای بدون نام نادیده گرفته می‌شوند)
 function typeTopReporterPie(array $rows): array
 {
     $agg = [];
     foreach ($rows as $r) {
+        $rep = trim((string)($r['reporter'] ?? ''));
+        if (!isValidReporterName($rep)) continue;
         $t = trim((string)($r['news_type'] ?? '')) ?: 'نامشخص';
-        $rep = trim((string)($r['reporter'] ?? '')) ?: 'نامشخص';
         if (!isset($agg[$t])) $agg[$t] = [];
         $agg[$t][$rep] = ($agg[$t][$rep] ?? 0) + 1;
     }
@@ -428,6 +438,41 @@ function typeTopReporterPie(array $rows): array
     }
     usort($out, fn($a, $b) => $b['count'] <=> $a['count']);
     return $out;
+}
+
+// ۵ خبرنگار پرکارتر (بدون نام‌های خالی) به همراه سهم درصدی هر نوع خبر از اخبار آن‌ها
+function topReportersTypeBreakdown(array $rows, int $limit = 10): array
+{
+    $repTotals = [];
+    $repTypeCounts = [];
+    $allTypes = [];
+    foreach ($rows as $r) {
+        $rep = trim((string)($r['reporter'] ?? ''));
+        if (!isValidReporterName($rep)) continue;
+        $t = trim((string)($r['news_type'] ?? '')) ?: 'نامشخص';
+        $repTotals[$rep] = ($repTotals[$rep] ?? 0) + 1;
+        $repTypeCounts[$rep][$t] = ($repTypeCounts[$rep][$t] ?? 0) + 1;
+        $allTypes[$t] = true;
+    }
+    arsort($repTotals);
+    $topReps = array_slice(array_keys($repTotals), 0, $limit);
+    $types = array_keys($allTypes);
+    $series = [];
+    foreach ($types as $t) {
+        $percents = [];
+        foreach ($topReps as $rep) {
+            $total = $repTotals[$rep];
+            $cnt = $repTypeCounts[$rep][$t] ?? 0;
+            $percents[] = $total > 0 ? round($cnt * 100 / $total, 1) : 0;
+        }
+        $series[] = ['type' => $t, 'percents' => $percents];
+    }
+    return [
+        'reporters' => $topReps,
+        'totals'    => array_map(fn($rep) => $repTotals[$rep], $topReps),
+        'types'     => $types,
+        'series'    => $series,
+    ];
 }
 
 function buildHourlySeries(array $rows): array
