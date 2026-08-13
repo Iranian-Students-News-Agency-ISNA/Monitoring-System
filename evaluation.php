@@ -85,6 +85,10 @@ require __DIR__ . '/includes/layout_top.php';
         <h6 class="mb-2">پرکارترین خبرنگار در هر نوع خبر</h6>
         <canvas id="reporterTypePie" height="220"></canvas>
       </div>
+      <div class="col-md-7 d-flex flex-column">
+        <h6 class="mb-2">۱۰ خبرنگار پرکار (سهم درصدی هر نوع خبر)</h6>
+        <div style="flex:1; min-height:320px; position:relative;"><canvas id="reporterStackedBar"></canvas></div>
+      </div>
     </div>
     <hr class="my-4">
     <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
@@ -266,7 +270,7 @@ require __DIR__ . '/includes/layout_top.php';
 
 <script>
 const API = 'evaluation_api.php';
-let svcChart=null, hourlyChart=null, subChart=null, repChart=null, pubChart=null, typePieChart=null, reporterTypePieChart=null;
+let svcChart=null, hourlyChart=null, subChart=null, repChart=null, pubChart=null, typePieChart=null, reporterTypePieChart=null, reporterStackedChart=null;
 let qcCoverageChart=null, qcMatchChart=null, qcElementsChart=null;
 const PALETTE = ['#123a73','#1f5aa8','#e0a800','#c0392b','#16a085','#8e44ad','#d35400','#2c3e50','#27ae60','#7f8c8d','#e67e22','#2980b9','#c2185b'];
 
@@ -329,6 +333,31 @@ function makePieChart(canvasId, items){
   }, options: { responsive:true, plugins:{ legend:{position:'bottom'}, tooltip:{callbacks:{label:(c)=>{
     const item = items[c.dataIndex]; return `${item.type}: ${item.count} (${item.percent}%)`;
   }}}}}});
+}
+
+function makeReporterStackedBar(canvasId, data){
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  const datasets = data.types.map((t, idx) => {
+    const s = data.series.find(x => x.type === t);
+    return { label: t, data: s ? s.percents : data.reporters.map(()=>0), backgroundColor: PALETTE[idx % PALETTE.length], barPercentage: 0.6, categoryPercentage: 0.6 };
+  });
+  return new Chart(ctx, {
+    type: 'bar',
+    data: { labels: data.reporters, datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, beginAtZero: true, max: 100, title: { display:true, text:'درصد' } },
+        y: { stacked: true }
+      },
+      plugins: {
+        legend: { position: 'bottom' },
+        tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.x}%` } }
+      }
+    }
+  });
 }
 
 function makeLabeledPieChart(canvasId, items){
@@ -401,6 +430,8 @@ async function loadOverview(){
   renderAvgViewsTable(qs('typeAvgViewsTable'), data.type_avg_views);
   if (reporterTypePieChart) reporterTypePieChart.destroy();
   reporterTypePieChart = makeLabeledPieChart('reporterTypePie', data.type_top_reporter_pie.map(it => ({ label: `${it.type} — ${it.reporter}`, count: it.count })));
+  if (reporterStackedChart) reporterStackedChart.destroy();
+  reporterStackedChart = makeReporterStackedBar('reporterStackedBar', data.top_reporters_type_breakdown);
 }
 
 async function loadHourly(){
