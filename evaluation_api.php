@@ -78,6 +78,7 @@ switch ($action) {
             'type_pie'       => typeBreakdownTable($scopeRows),
             'type_avg_views' => typeAvgViewsTable($scopeRows),
             'type_top_reporter_pie' => typeTopReporterPie($scopeRows),
+            'top_reporters_type_breakdown' => topReportersTypeBreakdown($scopeRows, 10),
         ], JSON_UNESCAPED_UNICODE);
         break;
 
