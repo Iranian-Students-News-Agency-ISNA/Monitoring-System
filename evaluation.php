@@ -149,6 +149,8 @@ require __DIR__ . '/includes/layout_top.php';
           <option value="5">۵</option>
           <option value="10" selected>۱۰</option>
           <option value="15">۱۵</option>
+          <option value="20">۲۰</option>
+          <option value="30">۳۰</option>
         </select>
       </div>
       <div class="col-md-3">
