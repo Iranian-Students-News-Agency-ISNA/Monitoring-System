@@ -18,12 +18,12 @@ $name     = trim($_GET['name'] ?? '');
 $reporter = trim($_GET['reporter'] ?? '');
 $newsType = trim($_GET['news_type'] ?? '');
 $limit    = (int)($_GET['limit'] ?? 10);
-if (!in_array($limit, [5, 10, 15], true)) $limit = 10;
+if (!in_array($limit, [5, 10, 15, 20, 30], true)) $limit = 10;
 
 // فیلتر سراسری «جست‌وجو در تیتر»: هر چند کلمه/عبارت که کاربر جداگانه اضافه کرده باشد (AND)
 $keywordsRaw = $_GET['keyword'] ?? [];
 if (!is_array($keywordsRaw)) $keywordsRaw = [$keywordsRaw];
-$keywords = array_values(array_filter(array_map('trim', $keywordsRaw), fn($w) => $w !== ''));
+$keywords = array_values(array_filter(array_map('trim', $keywordsRaw), function($w) { return $w !== ''; }));
 $keywordMode = ($_GET['keyword_mode'] ?? 'and') === 'or' ? 'or' : 'and';
 
 if ($from === '' || $to === '') {
@@ -96,7 +96,7 @@ switch ($action) {
     case 'subservice_series':
         if ($service === '' || $subservice === '') { echo json_encode(['ok' => false, 'error' => 'سرویس یا زیرسرویس انتخاب نشده است.'], JSON_UNESCAPED_UNICODE); break; }
         $allRows = rowsInRange($from, $to, $service, '', '', '', $subservice, $site, $keywords, $keywordMode);
-        $chartRows = $newsType !== '' ? array_values(array_filter($allRows, fn($r) => ($r['news_type'] ?? '') === $newsType)) : $allRows;
+        $chartRows = $newsType !== '' ? array_values(array_filter($allRows, function($r) { return ($r['news_type'] ?? '') === $newsType; })) : $allRows;
         echo json_encode([
             'ok' => true,
             'series' => buildSeries($chartRows, $granularity),
@@ -109,7 +109,7 @@ switch ($action) {
     case 'person_series':
         if ($name === '') { echo json_encode(['ok' => false, 'error' => 'نامی انتخاب نشده است.'], JSON_UNESCAPED_UNICODE); break; }
         $allRows = rowsInRange($from, $to, $service, $role, $name, '', '', $site, $keywords, $keywordMode);
-        $chartRows = $newsType !== '' ? array_values(array_filter($allRows, fn($r) => ($r['news_type'] ?? '') === $newsType)) : $allRows;
+        $chartRows = $newsType !== '' ? array_values(array_filter($allRows, function($r) { return ($r['news_type'] ?? '') === $newsType; })) : $allRows;
         echo json_encode([
             'ok' => true,
             'series' => buildSeries($chartRows, $granularity),
