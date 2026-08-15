@@ -309,16 +309,18 @@ function newsEntriesFilter(string $reporter, string $from, string $to, string $s
 // ===================== ارزیابی: آمار عملکرد سرویس‌ها (بر پایه excel_rows، شامل بازدید) =====================
 // این توابع از پروژه «ایسنا» پورت شده‌اند و روی همان excel_rows نسخه نظارت کار می‌کنند.
 
-function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = ''): array
+function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and'): array
 {
     $activeFileIds = excelActiveFileIds();
     if (empty($activeFileIds)) return [];
+    $kws = array_values(array_filter(array_map('trim', $titleKeywords), fn($w) => $w !== ''));
     $out = [];
     foreach (jsonRead('excel_rows') as $r) {
         if (!isset($activeFileIds[(int)($r['file_id'] ?? 0)])) continue;
         $d = trim((string)($r['date'] ?? ''));
         if ($d === '' || $d < $from || $d > $to) continue;
-        if (trim((string)($r['title'] ?? '')) === '') continue;
+        $title = trim((string)($r['title'] ?? ''));
+        if ($title === '') continue;
         if ($site !== '' && ($r['site'] ?? '') !== $site) continue;
         if ($service !== '' && ($r['service_main'] ?? '') !== $service) continue;
         if ($subservice !== '' && ($r['service_sub'] ?? '') !== $subservice) continue;
@@ -327,9 +329,25 @@ function rowsInRange(string $from, string $to, string $service = '', string $rol
             if (trim((string)($r[$field] ?? '')) !== $name) continue;
         }
         if ($newsType !== '' && ($r['news_type'] ?? '') !== $newsType) continue;
+        if (!empty($kws) && !titleMatchesKeywords($title, $kws, $keywordMode)) continue;
         $out[] = $r;
     }
     return $out;
+}
+
+// بررسی می‌کند تیتر با مجموعه کلمات/عبارات کاربر مطابقت دارد یا نه (mode: 'and' یا 'or')
+function titleMatchesKeywords(string $title, array $kws, string $mode): bool
+{
+    if ($mode === 'or') {
+        foreach ($kws as $kw) {
+            if (mb_stripos($title, $kw) !== false) return true;
+        }
+        return false;
+    }
+    foreach ($kws as $kw) {
+        if (mb_stripos($title, $kw) === false) return false;
+    }
+    return true;
 }
 
 function distinctValuesInRange(string $from, string $to, string $field, string $service = '', string $site = ''): array
@@ -511,9 +529,10 @@ function topViewedNews(array $rows, int $limit): array
 // ===================== ارزیابی: بررسی کیفی (بر پایه news_entries نظارت) =====================
 
 // ردیف‌های نظارت (news_entries) در یک بازه، با فیلتر سرویس/زیرسرویس/خبرنگار/نوع خبر
-function newsEntriesInRange(string $from, string $to, string $service = '', string $subservice = '', string $reporter = '', string $newsType = '', string $site = ''): array
+function newsEntriesInRange(string $from, string $to, string $service = '', string $subservice = '', string $reporter = '', string $newsType = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and'): array
 {
-    $out = array_values(array_filter(jsonRead('news_entries'), function ($r) use ($from, $to, $service, $subservice, $reporter, $newsType, $site) {
+    $kws = array_values(array_filter(array_map('trim', $titleKeywords), fn($w) => $w !== ''));
+    $out = array_values(array_filter(jsonRead('news_entries'), function ($r) use ($from, $to, $service, $subservice, $reporter, $newsType, $site, $kws, $keywordMode) {
         $d = $r['entry_date'] ?? '';
         if ($d === '' || $d < $from || $d > $to) return false;
         if ($site !== '' && ($r['site'] ?? '') !== $site) return false;
@@ -521,6 +540,7 @@ function newsEntriesInRange(string $from, string $to, string $service = '', stri
         if ($subservice !== '' && ($r['service_sub'] ?? '') !== $subservice) return false;
         if ($reporter !== '' && ($r['reporter'] ?? '') !== $reporter) return false;
         if ($newsType !== '' && ($r['news_type'] ?? '') !== $newsType) return false;
+        if (!empty($kws) && !titleMatchesKeywords((string)($r['title'] ?? ''), $kws, $keywordMode)) return false;
         return true;
     }));
     usort($out, fn($a, $b) => ($b['entry_date'] ?? '') <=> ($a['entry_date'] ?? '') ?: ($b['id'] ?? 0) <=> ($a['id'] ?? 0));
