@@ -82,6 +82,15 @@ function currentUser(): ?array
     if (!$username) return null;
     $sessEpoch = (int)($_SESSION['auth_user']['epoch'] ?? -1);
     if ($sessEpoch !== sessionEpochGet()) return null; // نشست به‌خاطر «خروج اجباری همه» باطل شده
+
+    // خروج خودکار پس از ۲۰ دقیقه عدم فعالیت
+    $inactivityLimit = 1200; // ثانیه
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > $inactivityLimit)) {
+        session_destroy();
+        return null;
+    }
+    $_SESSION['last_activity'] = time();
+
     // نام نمایشی همیشه زنده از users.json خوانده می‌شود (نه از سشن)، تا اگر مدیر آن را
     // بعداً اصلاح کرد، بدون نیاز به خروج/ورود دوباره کاربر، فوراً روی رکوردهای جدید اثر بگذارد.
     $u = userFindByUsername($username);
