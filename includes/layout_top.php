@@ -85,6 +85,7 @@ body{
         <li class="nav-item"><a class="nav-link" href="upload.php">آپلود اکسل روزانه</a></li>
         <li class="nav-item"><a class="nav-link" href="report.php">گزارش‌گیری</a></li>
         <li class="nav-item"><a class="nav-link" href="evaluation.php">ارزیابی</a></li>
+        <li class="nav-item"><a class="nav-link" href="tasks.php">میز کار</a></li>
         <?php if ($__me): ?>
         <li class="nav-item mt-2 mt-lg-0">
           <span class="user-pill">
