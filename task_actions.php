@@ -16,6 +16,18 @@ function taskAssigneesFromPost(): array
     return [];
 }
 
+function taskTagsFromPost(): array
+{
+    if (isset($_POST['tags']) && is_array($_POST['tags'])) {
+        return array_values(array_unique(array_filter(array_map('trim', $_POST['tags']))));
+    }
+    if (!empty($_POST['tags_text'])) {
+        $parts = preg_split('/[,،]/u', (string)$_POST['tags_text']);
+        return array_values(array_unique(array_filter(array_map('trim', $parts))));
+    }
+    return [];
+}
+
 try {
     switch ($action) {
         case 'create':
@@ -26,7 +38,8 @@ try {
                 $_POST['priority'] ?: 'medium',
                 $_POST['due'] ?: null,
                 (string)($_POST['column_id'] ?? 'todo'),
-                $me['username'] ?? null
+                $me['username'] ?? null,
+                taskTagsFromPost()
             );
             echo json_encode(['ok' => true, 'task' => $t], JSON_UNESCAPED_UNICODE);
             break;
@@ -44,12 +57,20 @@ try {
             if (isset($_POST['assignees']) || isset($_POST['assignee'])) {
                 $fields['assignees'] = taskAssigneesFromPost();
             }
+            if (isset($_POST['tags']) || isset($_POST['tags_text'])) {
+                $fields['tags'] = taskTagsFromPost();
+            }
             $ok = taskUpdate((int)($_POST['task_id'] ?? 0), $fields);
             echo json_encode(['ok' => $ok], JSON_UNESCAPED_UNICODE);
             break;
 
         case 'complete':
             $ok = taskComplete((int)($_POST['task_id'] ?? 0), trim((string)($_POST['done_note'] ?? '')));
+            echo json_encode(['ok' => $ok], JSON_UNESCAPED_UNICODE);
+            break;
+
+        case 'review':
+            $ok = taskReview((int)($_POST['task_id'] ?? 0), trim((string)($_POST['review_note'] ?? '')), $me['username'] ?? null);
             echo json_encode(['ok' => $ok], JSON_UNESCAPED_UNICODE);
             break;
 

@@ -24,6 +24,10 @@ function taskNormalize(array $t): array
     if (!isset($t['created_by'])) $t['created_by'] = null;
     if (!isset($t['done_note'])) $t['done_note'] = '';
     if (!isset($t['done_at'])) $t['done_at'] = null;
+    if (!isset($t['tags']) || !is_array($t['tags'])) $t['tags'] = [];
+    if (!isset($t['review_note'])) $t['review_note'] = '';
+    if (!isset($t['review_by'])) $t['review_by'] = null;
+    if (!isset($t['review_at'])) $t['review_at'] = null;
     return $t;
 }
 
@@ -41,9 +45,9 @@ function tasksBoard(): array
     return $data;
 }
 
-function taskCreate(string $title, string $desc, array $assignees, string $priority, ?string $due, string $columnId, ?string $createdBy): array
+function taskCreate(string $title, string $desc, array $assignees, string $priority, ?string $due, string $columnId, ?string $createdBy, array $tags = []): array
 {
-    $result = jsonUpdate('tasks', function ($data) use ($title, $desc, $assignees, $priority, $due, $columnId, $createdBy, &$newTask) {
+    $result = jsonUpdate('tasks', function ($data) use ($title, $desc, $assignees, $priority, $due, $columnId, $createdBy, $tags, &$newTask) {
         if (empty($data['columns'])) $data = ['columns' => tasksDefaultColumns(), 'next_id' => 1];
         $id = (int)($data['next_id'] ?? 1);
         $newTask = [
@@ -57,6 +61,10 @@ function taskCreate(string $title, string $desc, array $assignees, string $prior
             'created_at' => date('Y-m-d H:i:s'),
             'done_note' => '',
             'done_at' => null,
+            'tags' => array_values(array_unique(array_filter(array_map('trim', $tags)))),
+            'review_note' => '',
+            'review_by' => null,
+            'review_at' => null,
         ];
         $found = false;
         foreach ($data['columns'] as &$col) {
@@ -109,7 +117,7 @@ function taskUpdate(int $taskId, array $fields): bool
     jsonUpdate('tasks', function ($data) use ($taskId, $fields, &$ok) {
         [$ci, $ti] = taskFindColumnIndex($data, $taskId);
         if ($ci === -1) return $data;
-        foreach (['title', 'desc', 'assignees', 'priority', 'due', 'done_note'] as $f) {
+        foreach (['title', 'desc', 'assignees', 'priority', 'due', 'done_note', 'tags'] as $f) {
             if (array_key_exists($f, $fields)) $data['columns'][$ci]['tasks'][$ti][$f] = $fields[$f];
         }
         $ok = true;
@@ -118,7 +126,7 @@ function taskUpdate(int $taskId, array $fields): bool
     return $ok;
 }
 
-// علامت‌گذاری به‌عنوان انجام‌شده: انتقال به ستون done + ثبت توضیح انجام‌شده
+// علامت‌گذاری به‌عنوان انجام‌شده: انتقال به ستون done + ثبت توضیح انجام‌شده (توسط خودِ انجام‌دهنده)
 function taskComplete(int $taskId, string $doneNote): bool
 {
     $ok = false;
@@ -132,6 +140,22 @@ function taskComplete(int $taskId, string $doneNote): bool
         foreach ($data['columns'] as &$col) {
             if ($col['id'] === 'done') { $col['tasks'][] = $task; break; }
         }
+        $ok = true;
+        return $data;
+    });
+    return $ok;
+}
+
+// ثبت یادداشت بررسی توسط مدیر/بررسی‌کننده (مستقل از توضیح انجام‌دهنده)
+function taskReview(int $taskId, string $reviewNote, ?string $reviewer): bool
+{
+    $ok = false;
+    jsonUpdate('tasks', function ($data) use ($taskId, $reviewNote, $reviewer, &$ok) {
+        [$ci, $ti] = taskFindColumnIndex($data, $taskId);
+        if ($ci === -1) return $data;
+        $data['columns'][$ci]['tasks'][$ti]['review_note'] = $reviewNote;
+        $data['columns'][$ci]['tasks'][$ti]['review_by'] = $reviewer;
+        $data['columns'][$ci]['tasks'][$ti]['review_at'] = date('Y-m-d H:i:s');
         $ok = true;
         return $data;
     });
