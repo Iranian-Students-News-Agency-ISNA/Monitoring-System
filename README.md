@@ -61,10 +61,10 @@ Every login requires a fresh 6-digit TOTP code; there are no static passwords.
   */30 * * * * /usr/bin/php /home/USERNAME/public_html/nezarat/cron_fetch_trends.php >> /home/USERNAME/public_html/nezarat/storage/tmp/trends_cron.log 2>&1
   ```
 
-### Task board (میزکار)
-- `tasks.php` — a Trello-style board (برای انجام / در حال انجام / بررسی / انجام‌شده) for team task management, with:
+### Task board 
+- `tasks.php` — a Trello-style board for team task management, with:
   - Drag-and-drop cards between columns, plus a round checkbox to mark a card done in one click.
-  - Multi-assignee selection per task and a priority level (کم/متوسط/زیاد) shown as a colored border/badge.
+  - Multi-assignee selection per task and a priority level shown as a colored border/badge.
   - **Tags**: free-text tags per task (with autocomplete of previously used tags), shown as badges on the card.
   - **Filters**: filter the whole board by assignee, tag, and a due-date range (using the same Jalali range-picker style as the evaluation page), applied instantly client-side with live per-column counts.
   - **Due date**: a clickable Jalali calendar picker (no manual typing), shared with the rest of the app.
