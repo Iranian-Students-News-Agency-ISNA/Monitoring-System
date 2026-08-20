@@ -5,6 +5,16 @@ requireLoginPage();
 $__me = currentUser();
 $board = tasksBoard();
 $users = usersAll();
+
+function taskUserLabel(array $users, ?string $username): string
+{
+    if (!$username) return '';
+    foreach ($users as $u) {
+        if (($u['username'] ?? '') === $username) return $u['display_name'] ?: $u['username'];
+    }
+    return $username;
+}
+
 require __DIR__ . '/includes/layout_top.php';
 ?>
 <style>
@@ -43,17 +53,33 @@ require __DIR__ . '/includes/layout_top.php';
 .task-card{
   background:#fff; border-radius:10px; padding:10px 12px; margin-bottom:8px;
   box-shadow:0 1px 3px rgba(9,30,66,.2);
-  cursor:grab; border-left:4px solid var(--pc,#0079bf);
+  cursor:grab; border-left:4px solid var(--pc,#0079bf); position:relative;
   transition: transform .12s ease, box-shadow .12s ease;
 }
 .task-card:hover{ box-shadow:0 4px 10px rgba(9,30,66,.25); transform: translateY(-1px); }
 .task-card.dragging{ opacity:.4; }
 .task-card-title{font-size:.92rem; font-weight:600; color:#172b4d; margin-bottom:6px;}
-.task-card-meta{display:flex; justify-content:space-between; align-items:center; font-size:.75rem; color:#5e6c84;}
-.task-avatar{
-  width:24px; height:24px; border-radius:50%; background:#0079bf; color:#fff;
-  display:inline-flex; align-items:center; justify-content:center; font-size:.7rem; font-weight:700;
+.task-card-meta{display:flex; justify-content:space-between; align-items:center; font-size:.75rem; color:#5e6c84; flex-wrap:wrap; gap:4px;}
+.task-card-assignees{font-size:.72rem; color:#0079bf; font-weight:600;}
+.task-card-creator{font-size:.68rem; color:#8993a4; margin-top:4px;}
+.task-card-donenote{font-size:.7rem; color:#1a7f4e; background:#e3fcef; border-radius:6px; padding:4px 6px; margin-top:6px;}
+.task-round-check{
+  appearance:none; -webkit-appearance:none; margin:0;
+  position:absolute; top:8px; left:8px;
+  width:20px; height:20px; border-radius:50%;
+  border:2px solid #61bd4f; background:#fff; cursor:pointer;
 }
+.task-round-check:checked{ background:#61bd4f; }
+.task-round-check:checked::after{
+  content:'✓'; color:#fff; font-size:12px; font-weight:700;
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+}
+.task-round-check:disabled{ opacity:.85; cursor:default; }
+.task-card{ padding-left:34px; }
+.task-assignee-list{
+  max-height:150px; overflow-y:auto; border:1px solid #dee2e6; border-radius:8px; padding:8px;
+}
+.task-assignee-list .form-check{ margin-bottom:4px; }
 .task-add-col-btn{
   background:rgba(255,255,255,.18); border:1px dashed rgba(255,255,255,.6); color:#fff;
   border-radius:14px; min-width:220px; flex-shrink:0; padding:10px; align-self:flex-start;
@@ -85,28 +111,35 @@ require __DIR__ . '/includes/layout_top.php';
         </div>
         <div class="task-cards" data-column-id="<?= htmlspecialchars($col['id']) ?>">
           <?php foreach ($col['tasks'] as $t):
-            $assigneeUser = null;
-            foreach ($users as $u) { if (($u['username'] ?? '') === ($t['assignee'] ?? '')) { $assigneeUser = $u; break; } }
-            $initial = $assigneeUser ? mb_substr($assigneeUser['display_name'] ?: $assigneeUser['username'], 0, 1) : '?';
+            $assigneeNames = array_map(fn($u) => taskUserLabel($users, $u), $t['assignees']);
+            $creatorName = taskUserLabel($users, $t['created_by']);
           ?>
           <div class="task-card priority-<?= htmlspecialchars($t['priority'] ?? 'medium') ?>"
                draggable="true" data-task-id="<?= (int)$t['id'] ?>"
                data-title="<?= htmlspecialchars($t['title']) ?>"
                data-desc="<?= htmlspecialchars($t['desc'] ?? '') ?>"
-               data-assignee="<?= htmlspecialchars($t['assignee'] ?? '') ?>"
+               data-assignees="<?= htmlspecialchars(json_encode($t['assignees'], JSON_UNESCAPED_UNICODE)) ?>"
                data-priority="<?= htmlspecialchars($t['priority'] ?? 'medium') ?>"
-               data-due="<?= htmlspecialchars($t['due'] ?? '') ?>">
+               data-due="<?= htmlspecialchars($t['due'] ?? '') ?>"
+               data-done-note="<?= htmlspecialchars($t['done_note'] ?? '') ?>">
+            <input type="checkbox" class="task-round-check" title="انجام شد"
+                   data-complete-id="<?= (int)$t['id'] ?>"
+                   <?= $col['id'] === 'done' ? 'checked disabled' : '' ?>>
             <div class="task-card-title"><?= htmlspecialchars($t['title']) ?></div>
             <div class="task-card-meta">
               <span class="badge badge-priority-<?= htmlspecialchars($t['priority'] ?? 'medium') ?>">
                 <?= ['low'=>'کم','medium'=>'متوسط','high'=>'زیاد'][$t['priority'] ?? 'medium'] ?? 'متوسط' ?>
               </span>
-              <?php if ($assigneeUser): ?>
-                <span class="task-avatar" title="<?= htmlspecialchars($assigneeUser['display_name'] ?: $assigneeUser['username']) ?>"><?= htmlspecialchars($initial) ?></span>
-              <?php else: ?>
-                <span class="text-muted">—</span>
-              <?php endif; ?>
+              <span class="task-card-assignees">
+                <?= $assigneeNames ? htmlspecialchars(implode('، ', $assigneeNames)) : '<span class="text-muted">بدون اساین</span>' ?>
+              </span>
             </div>
+            <?php if ($creatorName): ?>
+              <div class="task-card-creator">ساخته‌شده توسط: <?= htmlspecialchars($creatorName) ?></div>
+            <?php endif; ?>
+            <?php if (!empty($t['done_note'])): ?>
+              <div class="task-card-donenote">✅ <?= htmlspecialchars($t['done_note']) ?></div>
+            <?php endif; ?>
           </div>
           <?php endforeach; ?>
         </div>
@@ -135,13 +168,15 @@ require __DIR__ . '/includes/layout_top.php';
         </div>
         <div class="row g-2">
           <div class="col-6">
-            <label class="form-label">اساین به</label>
-            <select class="form-select" id="taskAssignee">
-              <option value="">— بدون اساین —</option>
+            <label class="form-label">اساین به (چند نفر را تیک بزنید)</label>
+            <div class="task-assignee-list" id="taskAssigneesBox">
               <?php foreach ($users as $u): ?>
-                <option value="<?= htmlspecialchars($u['username']) ?>"><?= htmlspecialchars($u['display_name'] ?: $u['username']) ?></option>
+                <div class="form-check">
+                  <input class="form-check-input task-assignee-chk" type="checkbox" value="<?= htmlspecialchars($u['username']) ?>" id="asg_<?= htmlspecialchars($u['username']) ?>">
+                  <label class="form-check-label" for="asg_<?= htmlspecialchars($u['username']) ?>"><?= htmlspecialchars($u['display_name'] ?: $u['username']) ?></label>
+                </div>
               <?php endforeach; ?>
-            </select>
+            </div>
           </div>
           <div class="col-6">
             <label class="form-label">اولویت</label>
@@ -164,6 +199,10 @@ require __DIR__ . '/includes/layout_top.php';
             <?php endforeach; ?>
           </select>
         </div>
+        <div class="mb-2">
+          <label class="form-label">توضیحات انجام‌شده</label>
+          <textarea class="form-control" id="taskDoneNote" rows="2" placeholder="در صورت انجام کار، توضیح دهید چه کاری انجام شد"></textarea>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-danger d-none" id="taskDeleteBtn">حذف</button>
@@ -181,34 +220,40 @@ document.addEventListener('DOMContentLoaded', function(){
     id: document.getElementById('taskId'),
     title: document.getElementById('taskTitle'),
     desc: document.getElementById('taskDesc'),
-    assignee: document.getElementById('taskAssignee'),
+    assigneesBox: document.getElementById('taskAssigneesBox'),
     priority: document.getElementById('taskPriority'),
     due: document.getElementById('taskDue'),
     column: document.getElementById('taskColumn'),
+    doneNote: document.getElementById('taskDoneNote'),
   };
   const modalTitle = document.getElementById('taskModalTitle');
   const deleteBtn = document.getElementById('taskDeleteBtn');
 
+  function setAssignees(list){
+    const set = new Set(list || []);
+    els.assigneesBox.querySelectorAll('.task-assignee-chk').forEach(chk => { chk.checked = set.has(chk.value); });
+  }
+
   function resetForm(defaultColumn){
-    els.id.value=''; els.title.value=''; els.desc.value=''; els.assignee.value='';
-    els.priority.value='medium'; els.due.value='';
+    els.id.value=''; els.title.value=''; els.desc.value='';
+    setAssignees([]);
+    els.priority.value='medium'; els.due.value=''; els.doneNote.value='';
     if (defaultColumn) els.column.value = defaultColumn;
     modalTitle.textContent = 'کار جدید';
     deleteBtn.classList.add('d-none');
   }
-  document.getElementById('taskAddModal').addEventListener('show.bs.modal', function(e){
-    if (!e.relatedTarget) return; // باز شدن دستی از JS خودش رو مدیریت میکنه
-  });
   document.querySelector('[data-bs-target="#taskAddModal"]').addEventListener('click', function(){ resetForm('todo'); });
 
   document.querySelectorAll('.task-card').forEach(card => {
-    card.addEventListener('click', function(){
+    card.addEventListener('click', function(e){
+      if (e.target.closest('[data-complete-id]')) return; // دکمه done جدا مدیریت می‌شود
       els.id.value = this.dataset.taskId;
       els.title.value = this.dataset.title;
       els.desc.value = this.dataset.desc;
-      els.assignee.value = this.dataset.assignee;
+      setAssignees(JSON.parse(this.dataset.assignees || '[]'));
       els.priority.value = this.dataset.priority;
       els.due.value = this.dataset.due;
+      els.doneNote.value = this.dataset.doneNote || '';
       els.column.value = this.closest('.task-col').dataset.columnId;
       modalTitle.textContent = 'ویرایش کار';
       deleteBtn.classList.remove('d-none');
@@ -223,10 +268,11 @@ document.addEventListener('DOMContentLoaded', function(){
     if (isEdit) fd.append('task_id', els.id.value);
     fd.append('title', els.title.value.trim());
     fd.append('desc', els.desc.value.trim());
-    fd.append('assignee', els.assignee.value);
+    els.assigneesBox.querySelectorAll('.task-assignee-chk:checked').forEach(chk => fd.append('assignees[]', chk.value));
     fd.append('priority', els.priority.value);
     fd.append('due', els.due.value.trim());
     fd.append('column_id', els.column.value);
+    fd.append('done_note', els.doneNote.value.trim());
     if (!els.title.value.trim()) { els.title.focus(); return; }
     fetch('task_actions.php', {method:'POST', body: fd})
       .then(r=>r.json())
@@ -249,6 +295,27 @@ document.addEventListener('DOMContentLoaded', function(){
         else { alert('حذف نشد: ' + (res.msg || res.error || 'خطای نامشخص')); }
       })
       .catch(err=>{ alert('خطا در ارتباط با سرور: ' + err.message); });
+  });
+
+  // دایره تیک «انجام شد» روی کارت
+  document.querySelectorAll('.task-round-check[data-complete-id]').forEach(chk => {
+    chk.addEventListener('click', function(e){ e.stopPropagation(); });
+    chk.addEventListener('change', function(){
+      if (!this.checked) return; // فقط تیک‌زدن باعث تکمیل می‌شود
+      const note = prompt('توضیحات انجام‌شده را وارد کنید (اختیاری):', '');
+      if (note === null) { this.checked = false; return; } // انصراف
+      const fd = new FormData();
+      fd.append('action','complete');
+      fd.append('task_id', this.dataset.completeId);
+      fd.append('done_note', note.trim());
+      fetch('task_actions.php', {method:'POST', body: fd})
+        .then(r=>r.json())
+        .then(res=>{
+          if(res.ok){ location.reload(); }
+          else { this.checked = false; alert('ثبت نشد: ' + (res.msg || res.error || 'خطای نامشخص')); }
+        })
+        .catch(err=>{ this.checked = false; alert('خطا در ارتباط با سرور: ' + err.message); });
+    });
   });
 
   // درگ‌ودراپ ساده با HTML5 API
