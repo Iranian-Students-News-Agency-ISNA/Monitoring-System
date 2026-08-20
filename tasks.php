@@ -15,54 +15,88 @@ function taskUserLabel(array $users, ?string $username): string
     return $username;
 }
 
+$allTags = [];
+foreach ($board['columns'] as $col) {
+    foreach ($col['tasks'] as $t) {
+        foreach (($t['tags'] ?? []) as $tg) { $allTags[$tg] = true; }
+    }
+}
+$allTags = array_keys($allTags);
+sort($allTags);
+
 require __DIR__ . '/includes/layout_top.php';
 ?>
 <style>
+body{
+  background-image:
+    linear-gradient(rgba(18,58,115,0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(18,58,115,0.045) 1px, transparent 1px),
+    linear-gradient(160deg, rgba(6,54,42,.35), rgba(10,90,70,.2)),
+    url('assets/img/wallpapers.jpg') !important;
+  background-size: 44px 44px, 44px 44px, cover, cover !important;
+  background-position: 0 0, 0 0, center, center !important;
+  background-attachment: scroll, scroll, fixed, fixed !important;
+  background-repeat: repeat, repeat, no-repeat, no-repeat !important;
+}
 .task-wrap{
-  background: linear-gradient(120deg,#0079bf,#26a69a,#5b3cc4,#0079bf);
-  background-size: 300% 300%;
-  animation: taskGradient 16s ease infinite;
+  background: transparent;
   border-radius: 18px;
-  padding: 22px;
-  box-shadow: 0 8px 30px rgba(20,40,80,.25);
+  padding: 22px 0;
 }
-@keyframes taskGradient{
-  0%{background-position:0% 50%}
-  50%{background-position:100% 50%}
-  100%{background-position:0% 50%}
+.task-board-title{color:#0d2338; font-weight:800; margin-bottom:4px;}
+.task-board-sub{color:#2c3e50; margin-bottom:16px;}
+
+/* نوار فیلتر شیشه‌ای */
+.task-filters{
+  position: relative; z-index: 20;
+  background: rgba(255,255,255,.55);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.6);
+  border-radius: 14px; padding: 12px; margin-bottom: 16px;
+  display:flex; flex-wrap:wrap; gap:10px; align-items:end;
+  box-shadow: 0 4px 20px rgba(0,0,0,.08);
 }
-.task-board-title{color:#fff; font-weight:800; margin-bottom:4px;}
-.task-board-sub{color:rgba(255,255,255,.85); margin-bottom:16px;}
-.task-cols{display:flex; gap:14px; overflow-x:auto; padding-bottom:8px;}
+.task-filters label{color:#17324d; font-size:.78rem; margin-bottom:2px;}
+.task-filters .form-select, .task-filters .form-control{ min-width:150px; }
+.task-filters .btn-clear{ background:rgba(255,255,255,.9); border:none; }
+
+.task-cols{display:flex; gap:14px; flex-wrap:wrap; padding-bottom:8px; position:relative; z-index:1;}
 .task-col{
-  background: rgba(255,255,255,.94);
+  background: rgba(255,255,255,.5);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255,255,255,.5);
   border-radius: 14px;
-  min-width: 270px;
-  max-width: 270px;
-  flex-shrink:0;
+  flex: 1 1 240px;
+  min-width: 240px;
   padding: 10px;
   display:flex; flex-direction:column;
   max-height: 72vh;
-  box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  box-shadow: 0 4px 20px rgba(0,0,0,.12);
 }
-.task-col.drag-over{ outline:2px dashed #0079bf; outline-offset:-4px; background:#eef6ff; }
+.task-col.drag-over{ outline:2px dashed #0079bf; outline-offset:-4px; background:rgba(238,246,255,.85); }
 .task-col-head{display:flex; justify-content:space-between; align-items:center; padding:4px 6px 10px;}
-.task-col-head b{color:#17324d; font-size:.95rem;}
-.task-col-count{background:#dfe4ea; color:#42526e; border-radius:10px; padding:1px 8px; font-size:.75rem;}
+.task-col-head b{color:#0d2338; font-size:.95rem;}
+.task-col-count{background:rgba(255,255,255,.85); color:#17324d; border-radius:10px; padding:1px 8px; font-size:.75rem; font-weight:600;}
 .task-cards{overflow-y:auto; flex:1; padding:2px;}
 .task-card{
-  background:#fff; border-radius:10px; padding:10px 12px; margin-bottom:8px;
+  background:rgba(255,255,255,.88); border-radius:10px; padding:10px 12px; margin-bottom:8px;
   box-shadow:0 1px 3px rgba(9,30,66,.2);
   cursor:grab; border-left:4px solid var(--pc,#0079bf); position:relative;
   transition: transform .12s ease, box-shadow .12s ease;
 }
 .task-card:hover{ box-shadow:0 4px 10px rgba(9,30,66,.25); transform: translateY(-1px); }
 .task-card.dragging{ opacity:.4; }
+.task-card.task-hidden{ display:none; }
 .task-card-title{font-size:.92rem; font-weight:600; color:#172b4d; margin-bottom:6px;}
 .task-card-meta{display:flex; justify-content:space-between; align-items:center; font-size:.75rem; color:#5e6c84; flex-wrap:wrap; gap:4px;}
 .task-card-assignees{font-size:.72rem; color:#0079bf; font-weight:600;}
 .task-card-creator{font-size:.68rem; color:#8993a4; margin-top:4px;}
-.task-card-donenote{font-size:.7rem; color:#1a7f4e; background:#e3fcef; border-radius:6px; padding:4px 6px; margin-top:6px;}
+.task-card-donenote{font-size:.68rem; color:#1a7f4e; background:#e3fcef; border-radius:8px; padding:2px 8px; margin-top:6px; display:inline-block;}
+.task-card-reviewnote{font-size:.68rem; color:#4a2e9c; background:#eee6ff; border-radius:8px; padding:2px 8px; margin-top:6px; margin-right:4px; display:inline-block;}
+.task-card-tags{display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;}
+.task-tag-badge{background:#1a7f4e; color:#fff; border-radius:8px; padding:1px 8px; font-size:.66rem;}
+.task-review-btn{font-size:.68rem; margin-top:6px;}
+.task-show-more{width:100%; margin-top:4px;}
 .task-round-check{
   appearance:none; -webkit-appearance:none; margin:0;
   position:absolute; top:8px; left:8px;
@@ -102,6 +136,38 @@ require __DIR__ . '/includes/layout_top.php';
     <button class="btn btn-light fw-bold" data-bs-toggle="modal" data-bs-target="#taskAddModal">+ کار جدید</button>
   </div>
 
+  <div class="task-filters">
+    <div>
+      <label class="d-block">اساین‌شده</label>
+      <select class="form-select form-select-sm" id="fltAssignee">
+        <option value="">همه</option>
+        <?php foreach ($users as $u): ?>
+          <option value="<?= htmlspecialchars($u['username']) ?>"><?= htmlspecialchars($u['display_name'] ?: $u['username']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div>
+      <label class="d-block">تگ</label>
+      <select class="form-select form-select-sm" id="fltTag">
+        <option value="">همه</option>
+        <?php foreach ($allTags as $tg): ?>
+          <option value="<?= htmlspecialchars($tg) ?>"><?= htmlspecialchars($tg) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div>
+      <label class="d-block">از تاریخ سررسید</label>
+      <input type="text" class="form-control form-control-sm jalali-date-input" id="fltFrom" placeholder="از">
+    </div>
+    <div>
+      <label class="d-block">تا تاریخ سررسید</label>
+      <input type="text" class="form-control form-control-sm jalali-date-input" id="fltTo" placeholder="تا">
+    </div>
+    <div>
+      <button class="btn btn-sm btn-clear" id="fltClear">پاک کردن فیلترها</button>
+    </div>
+  </div>
+
   <div class="task-cols" id="taskCols">
     <?php foreach ($board['columns'] as $col): ?>
       <div class="task-col" data-column-id="<?= htmlspecialchars($col['id']) ?>">
@@ -110,18 +176,21 @@ require __DIR__ . '/includes/layout_top.php';
           <span class="task-col-count"><?= count($col['tasks']) ?></span>
         </div>
         <div class="task-cards" data-column-id="<?= htmlspecialchars($col['id']) ?>">
-          <?php foreach ($col['tasks'] as $t):
+          <?php foreach ($col['tasks'] as $idx => $t):
             $assigneeNames = array_map(fn($u) => taskUserLabel($users, $u), $t['assignees']);
             $creatorName = taskUserLabel($users, $t['created_by']);
+            $tags = $t['tags'] ?? [];
           ?>
-          <div class="task-card priority-<?= htmlspecialchars($t['priority'] ?? 'medium') ?>"
+          <div class="task-card priority-<?= htmlspecialchars($t['priority'] ?? 'medium') ?><?= $idx >= 20 ? ' task-hidden task-extra' : '' ?>"
                draggable="true" data-task-id="<?= (int)$t['id'] ?>"
                data-title="<?= htmlspecialchars($t['title']) ?>"
                data-desc="<?= htmlspecialchars($t['desc'] ?? '') ?>"
                data-assignees="<?= htmlspecialchars(json_encode($t['assignees'], JSON_UNESCAPED_UNICODE)) ?>"
                data-priority="<?= htmlspecialchars($t['priority'] ?? 'medium') ?>"
                data-due="<?= htmlspecialchars($t['due'] ?? '') ?>"
-               data-done-note="<?= htmlspecialchars($t['done_note'] ?? '') ?>">
+               data-done-note="<?= htmlspecialchars($t['done_note'] ?? '') ?>"
+               data-review-note="<?= htmlspecialchars($t['review_note'] ?? '') ?>"
+               data-tags="<?= htmlspecialchars(json_encode($tags, JSON_UNESCAPED_UNICODE)) ?>">
             <input type="checkbox" class="task-round-check" title="انجام شد"
                    data-complete-id="<?= (int)$t['id'] ?>"
                    <?= $col['id'] === 'done' ? 'checked disabled' : '' ?>>
@@ -134,14 +203,28 @@ require __DIR__ . '/includes/layout_top.php';
                 <?= $assigneeNames ? htmlspecialchars(implode('، ', $assigneeNames)) : '<span class="text-muted">بدون اساین</span>' ?>
               </span>
             </div>
+            <?php if ($tags): ?>
+              <div class="task-card-tags">
+                <?php foreach ($tags as $tg): ?><span class="task-tag-badge">#<?= htmlspecialchars($tg) ?></span><?php endforeach; ?>
+              </div>
+            <?php endif; ?>
             <?php if ($creatorName): ?>
               <div class="task-card-creator">ساخته‌شده توسط: <?= htmlspecialchars($creatorName) ?></div>
             <?php endif; ?>
             <?php if (!empty($t['done_note'])): ?>
-              <div class="task-card-donenote">✅ <?= htmlspecialchars($t['done_note']) ?></div>
+              <div class="task-card-donenote">✅ یادداشت</div>
+            <?php endif; ?>
+            <?php if (!empty($t['review_note'])): ?>
+              <div class="task-card-reviewnote">📝 یادداشت بررسی</div>
+            <?php endif; ?>
+            <?php if (in_array($col['id'], ['review', 'done'], true)): ?>
+              <button type="button" class="btn btn-sm btn-outline-secondary task-review-btn" data-review-id="<?= (int)$t['id'] ?>">📝 یادداشت بررسی</button>
             <?php endif; ?>
           </div>
           <?php endforeach; ?>
+          <?php if (count($col['tasks']) > 20): ?>
+            <button type="button" class="btn btn-sm btn-outline-light task-show-more">نمایش بیشتر (<?= count($col['tasks']) - 20 ?> مورد دیگر)</button>
+          <?php endif; ?>
         </div>
       </div>
     <?php endforeach; ?>
@@ -189,7 +272,14 @@ require __DIR__ . '/includes/layout_top.php';
         </div>
         <div class="mb-2 mt-2">
           <label class="form-label">تاریخ سررسید (اختیاری)</label>
-          <input type="text" class="form-control" id="taskDue" placeholder="مثلاً 1404/06/01">
+          <input type="text" class="form-control jalali-date-input" id="taskDue" placeholder="انتخاب تاریخ">
+        </div>
+        <div class="mb-2">
+          <label class="form-label">تگ‌ها (با کاما جدا کنید)</label>
+          <input type="text" class="form-control" id="taskTags" list="taskTagsList" placeholder="مثلاً فوری، خبر، ادیت">
+          <datalist id="taskTagsList">
+            <?php foreach ($allTags as $tg): ?><option value="<?= htmlspecialchars($tg) ?>"><?php endforeach; ?>
+          </datalist>
         </div>
         <div class="mb-2">
           <label class="form-label">ستون</label>
@@ -200,8 +290,13 @@ require __DIR__ . '/includes/layout_top.php';
           </select>
         </div>
         <div class="mb-2">
-          <label class="form-label">توضیحات انجام‌شده</label>
+          <label class="form-label">توضیحات انجام‌شده (توسط انجام‌دهنده)</label>
           <textarea class="form-control" id="taskDoneNote" rows="2" placeholder="در صورت انجام کار، توضیح دهید چه کاری انجام شد"></textarea>
+        </div>
+        <div class="mb-2 border-top pt-2 d-none" id="taskReviewBox">
+          <label class="form-label">یادداشت بررسی (توسط مدیر/بررسی‌کننده)</label>
+          <textarea class="form-control" id="taskReviewNote" rows="2" placeholder="نظر/بررسی مدیر روی این کار"></textarea>
+          <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="taskReviewSaveBtn">ثبت یادداشت بررسی</button>
         </div>
       </div>
       <div class="modal-footer">
@@ -225,6 +320,9 @@ document.addEventListener('DOMContentLoaded', function(){
     due: document.getElementById('taskDue'),
     column: document.getElementById('taskColumn'),
     doneNote: document.getElementById('taskDoneNote'),
+    tags: document.getElementById('taskTags'),
+    reviewBox: document.getElementById('taskReviewBox'),
+    reviewNote: document.getElementById('taskReviewNote'),
   };
   const modalTitle = document.getElementById('taskModalTitle');
   const deleteBtn = document.getElementById('taskDeleteBtn');
@@ -238,6 +336,7 @@ document.addEventListener('DOMContentLoaded', function(){
     els.id.value=''; els.title.value=''; els.desc.value='';
     setAssignees([]);
     els.priority.value='medium'; els.due.value=''; els.doneNote.value='';
+    els.tags.value=''; els.reviewNote.value=''; els.reviewBox.classList.add('d-none');
     if (defaultColumn) els.column.value = defaultColumn;
     modalTitle.textContent = 'کار جدید';
     deleteBtn.classList.add('d-none');
@@ -254,11 +353,38 @@ document.addEventListener('DOMContentLoaded', function(){
       els.priority.value = this.dataset.priority;
       els.due.value = this.dataset.due;
       els.doneNote.value = this.dataset.doneNote || '';
+      els.tags.value = (JSON.parse(this.dataset.tags || '[]')).join('، ');
+      els.reviewNote.value = this.dataset.reviewNote || '';
+      els.reviewBox.classList.remove('d-none');
       els.column.value = this.closest('.task-col').dataset.columnId;
       modalTitle.textContent = 'ویرایش کار';
       deleteBtn.classList.remove('d-none');
       modal.show();
     });
+  });
+
+  // دکمه‌ی سریع «یادداشت بررسی» روی کارت
+  document.querySelectorAll('.task-review-btn').forEach(btn => {
+    btn.addEventListener('click', function(e){
+      e.stopPropagation();
+      this.closest('.task-card').click();
+      setTimeout(() => els.reviewNote.focus(), 300);
+    });
+  });
+
+  document.getElementById('taskReviewSaveBtn').addEventListener('click', function(){
+    if (!els.id.value) return;
+    const fd = new FormData();
+    fd.append('action','review');
+    fd.append('task_id', els.id.value);
+    fd.append('review_note', els.reviewNote.value.trim());
+    fetch('task_actions.php', {method:'POST', body: fd})
+      .then(r=>r.json())
+      .then(res=>{
+        if(res.ok){ location.reload(); }
+        else { alert('ثبت نشد: ' + (res.msg || res.error || 'خطای نامشخص')); }
+      })
+      .catch(err=>{ alert('خطا در ارتباط با سرور: ' + err.message); });
   });
 
   document.getElementById('taskSaveBtn').addEventListener('click', function(){
@@ -273,6 +399,7 @@ document.addEventListener('DOMContentLoaded', function(){
     fd.append('due', els.due.value.trim());
     fd.append('column_id', els.column.value);
     fd.append('done_note', els.doneNote.value.trim());
+    fd.append('tags_text', els.tags.value.trim());
     if (!els.title.value.trim()) { els.title.focus(); return; }
     fetch('task_actions.php', {method:'POST', body: fd})
       .then(r=>r.json())
@@ -302,12 +429,17 @@ document.addEventListener('DOMContentLoaded', function(){
     chk.addEventListener('click', function(e){ e.stopPropagation(); });
     chk.addEventListener('change', function(){
       if (!this.checked) return; // فقط تیک‌زدن باعث تکمیل می‌شود
-      const note = prompt('توضیحات انجام‌شده را وارد کنید (اختیاری):', '');
-      if (note === null) { this.checked = false; return; } // انصراف
+      const card = this.closest('.task-card');
+      let note = card.dataset.doneNote || '';
+      if (!note) {
+        const entered = prompt('توضیحات انجام‌شده را وارد کنید (اختیاری):', '');
+        if (entered === null) { this.checked = false; return; } // انصراف
+        note = entered.trim();
+      }
       const fd = new FormData();
       fd.append('action','complete');
       fd.append('task_id', this.dataset.completeId);
-      fd.append('done_note', note.trim());
+      fd.append('done_note', note);
       fetch('task_actions.php', {method:'POST', body: fd})
         .then(r=>r.json())
         .then(res=>{
@@ -344,6 +476,59 @@ document.addEventListener('DOMContentLoaded', function(){
         .then(r=>r.json())
         .then(res=>{ if(!res.ok){ alert('جابه‌جایی ذخیره نشد: ' + (res.msg || res.error || 'خطای نامشخص')); location.reload(); } })
         .catch(err=>{ alert('خطا در ارتباط با سرور: ' + err.message); location.reload(); });
+    });
+  });
+
+  // نمایش بیشتر (برای ستون‌های شلوغ)
+  document.querySelectorAll('.task-show-more').forEach(btn => {
+    btn.addEventListener('click', function(){
+      this.closest('.task-cards').querySelectorAll('.task-extra').forEach(c => c.classList.remove('task-hidden'));
+      this.remove();
+    });
+  });
+
+  // فیلترها: اساین‌شده، تگ، بازه تاریخ سررسید
+  const fltAssignee = document.getElementById('fltAssignee');
+  const fltTag = document.getElementById('fltTag');
+  const fltFrom = document.getElementById('fltFrom');
+  const fltTo = document.getElementById('fltTo');
+
+  function applyFilters(){
+    const asg = fltAssignee.value, tag = fltTag.value, from = fltFrom.value.trim(), to = fltTo.value.trim();
+    document.querySelectorAll('.task-card').forEach(card => {
+      let show = true;
+      if (asg) {
+        const list = JSON.parse(card.dataset.assignees || '[]');
+        if (!list.includes(asg)) show = false;
+      }
+      if (show && tag) {
+        const tags = JSON.parse(card.dataset.tags || '[]');
+        if (!tags.includes(tag)) show = false;
+      }
+      if (show && (from || to)) {
+        const due = card.dataset.due || '';
+        if (!due) { show = false; }
+        else {
+          if (from && due < from) show = false;
+          if (to && due > to) show = false;
+        }
+      }
+      card.classList.toggle('task-hidden', !show);
+      if (show) card.classList.remove('task-extra'); // فیلتر فعال یعنی پیجینیشن کنار می‌رود
+    });
+    document.querySelectorAll('.task-cards').forEach(zone => {
+      const visible = zone.querySelectorAll('.task-card:not(.task-hidden)').length;
+      const countEl = zone.closest('.task-col').querySelector('.task-col-count');
+      countEl.textContent = visible;
+    });
+  }
+  [fltAssignee, fltTag, fltFrom, fltTo].forEach(el => el.addEventListener('change', applyFilters));
+  document.getElementById('fltClear').addEventListener('click', function(){
+    fltAssignee.value=''; fltTag.value=''; fltFrom.value=''; fltTo.value='';
+    document.querySelectorAll('.task-card').forEach(c => c.classList.remove('task-hidden'));
+    document.querySelectorAll('.task-cards').forEach(zone => {
+      const countEl = zone.closest('.task-col').querySelector('.task-col-count');
+      countEl.textContent = zone.querySelectorAll('.task-card').length;
     });
   });
 });
