@@ -5,6 +5,16 @@ requireLoginApi();
 header('Content-Type: application/json; charset=utf-8');
 
 $action = $_POST['action'] ?? '';
+$me = currentUser();
+
+function taskAssigneesFromPost(): array
+{
+    if (isset($_POST['assignees']) && is_array($_POST['assignees'])) {
+        return array_values(array_filter(array_map('trim', $_POST['assignees'])));
+    }
+    if (!empty($_POST['assignee'])) return [trim((string)$_POST['assignee'])];
+    return [];
+}
 
 try {
     switch ($action) {
@@ -12,10 +22,11 @@ try {
             $t = taskCreate(
                 trim((string)($_POST['title'] ?? '')),
                 trim((string)($_POST['desc'] ?? '')),
-                $_POST['assignee'] ?: null,
+                taskAssigneesFromPost(),
                 $_POST['priority'] ?: 'medium',
                 $_POST['due'] ?: null,
-                (string)($_POST['column_id'] ?? 'todo')
+                (string)($_POST['column_id'] ?? 'todo'),
+                $me['username'] ?? null
             );
             echo json_encode(['ok' => true, 'task' => $t], JSON_UNESCAPED_UNICODE);
             break;
@@ -27,10 +38,18 @@ try {
 
         case 'update':
             $fields = [];
-            foreach (['title', 'desc', 'assignee', 'priority', 'due'] as $f) {
+            foreach (['title', 'desc', 'priority', 'due', 'done_note'] as $f) {
                 if (isset($_POST[$f])) $fields[$f] = $_POST[$f];
             }
+            if (isset($_POST['assignees']) || isset($_POST['assignee'])) {
+                $fields['assignees'] = taskAssigneesFromPost();
+            }
             $ok = taskUpdate((int)($_POST['task_id'] ?? 0), $fields);
+            echo json_encode(['ok' => $ok], JSON_UNESCAPED_UNICODE);
+            break;
+
+        case 'complete':
+            $ok = taskComplete((int)($_POST['task_id'] ?? 0), trim((string)($_POST['done_note'] ?? '')));
             echo json_encode(['ok' => $ok], JSON_UNESCAPED_UNICODE);
             break;
 
