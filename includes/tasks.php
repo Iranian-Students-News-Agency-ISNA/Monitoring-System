@@ -14,6 +14,19 @@ function tasksDefaultColumns(): array
     ];
 }
 
+// نگاشت یک تسک قدیمی/جدید به فرمت یکسان (سازگاری با داده‌های قبلی که assignee تکی داشتند)
+function taskNormalize(array $t): array
+{
+    if (!isset($t['assignees']) || !is_array($t['assignees'])) {
+        $t['assignees'] = !empty($t['assignee']) ? [$t['assignee']] : [];
+    }
+    unset($t['assignee']);
+    if (!isset($t['created_by'])) $t['created_by'] = null;
+    if (!isset($t['done_note'])) $t['done_note'] = '';
+    if (!isset($t['done_at'])) $t['done_at'] = null;
+    return $t;
+}
+
 function tasksBoard(): array
 {
     $data = jsonRead('tasks');
@@ -22,22 +35,28 @@ function tasksBoard(): array
         jsonUpdate('tasks', function () use ($data) { return $data; });
     }
     if (!isset($data['next_id'])) $data['next_id'] = 1;
+    foreach ($data['columns'] as &$col) {
+        foreach ($col['tasks'] as &$t) { $t = taskNormalize($t); }
+    }
     return $data;
 }
 
-function taskCreate(string $title, string $desc, ?string $assignee, string $priority, ?string $due, string $columnId): array
+function taskCreate(string $title, string $desc, array $assignees, string $priority, ?string $due, string $columnId, ?string $createdBy): array
 {
-    $result = jsonUpdate('tasks', function ($data) use ($title, $desc, $assignee, $priority, $due, $columnId, &$newTask) {
+    $result = jsonUpdate('tasks', function ($data) use ($title, $desc, $assignees, $priority, $due, $columnId, $createdBy, &$newTask) {
         if (empty($data['columns'])) $data = ['columns' => tasksDefaultColumns(), 'next_id' => 1];
         $id = (int)($data['next_id'] ?? 1);
         $newTask = [
             'id' => $id,
             'title' => $title,
             'desc' => $desc,
-            'assignee' => $assignee,
+            'assignees' => array_values(array_filter($assignees)),
             'priority' => $priority, // low | medium | high
             'due' => $due,
+            'created_by' => $createdBy,
             'created_at' => date('Y-m-d H:i:s'),
+            'done_note' => '',
+            'done_at' => null,
         ];
         $found = false;
         foreach ($data['columns'] as &$col) {
@@ -47,7 +66,7 @@ function taskCreate(string $title, string $desc, ?string $assignee, string $prio
         $data['next_id'] = $id + 1;
         return $data;
     });
-    return $newTask;
+    return taskNormalize($newTask);
 }
 
 function taskFindColumnIndex(array $data, int $taskId): array
@@ -90,8 +109,28 @@ function taskUpdate(int $taskId, array $fields): bool
     jsonUpdate('tasks', function ($data) use ($taskId, $fields, &$ok) {
         [$ci, $ti] = taskFindColumnIndex($data, $taskId);
         if ($ci === -1) return $data;
-        foreach (['title', 'desc', 'assignee', 'priority', 'due'] as $f) {
+        foreach (['title', 'desc', 'assignees', 'priority', 'due', 'done_note'] as $f) {
             if (array_key_exists($f, $fields)) $data['columns'][$ci]['tasks'][$ti][$f] = $fields[$f];
+        }
+        $ok = true;
+        return $data;
+    });
+    return $ok;
+}
+
+// علامت‌گذاری به‌عنوان انجام‌شده: انتقال به ستون done + ثبت توضیح انجام‌شده
+function taskComplete(int $taskId, string $doneNote): bool
+{
+    $ok = false;
+    jsonUpdate('tasks', function ($data) use ($taskId, $doneNote, &$ok) {
+        [$ci, $ti] = taskFindColumnIndex($data, $taskId);
+        if ($ci === -1) return $data;
+        $task = $data['columns'][$ci]['tasks'][$ti];
+        $task['done_note'] = $doneNote;
+        $task['done_at'] = date('Y-m-d H:i:s');
+        array_splice($data['columns'][$ci]['tasks'], $ti, 1);
+        foreach ($data['columns'] as &$col) {
+            if ($col['id'] === 'done') { $col['tasks'][] = $task; break; }
         }
         $ok = true;
         return $data;
