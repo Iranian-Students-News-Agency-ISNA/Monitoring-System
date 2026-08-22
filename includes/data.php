@@ -309,11 +309,42 @@ function newsEntriesFilter(string $reporter, string $from, string $to, string $s
 // ===================== ارزیابی: آمار عملکرد سرویس‌ها (بر پایه excel_rows، شامل بازدید) =====================
 // این توابع از پروژه «ایسنا» پورت شده‌اند و روی همان excel_rows نسخه نظارت کار می‌کنند.
 
-function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and'): array
+// برچسب‌های معتبر بازه زمانی انتشار (بر مبنای ساعت:دقیقه انتشار)
+const TIME_PERIOD_LABELS = ['بامدادی', 'صبحگاهی', 'ظهرگاهی', 'شامگاهی'];
+
+// مرزهای هر بازه زمانی بر حسب دقیقه از نیمه‌شب (شامل هر دو سر بازه)
+// بامدادی: ۰۰:۰۰ تا ۰۷:۳۰ | صبحگاهی: ۰۷:۳۱ تا ۱۳:۰۰ | ظهرگاهی: ۱۳:۰۱ تا ۱۷:۵۹ | شامگاهی: ۱۸:۰۰ تا ۲۳:۵۹
+function timePeriodBoundaries(): array
+{
+    return [
+        'بامدادی' => [0, 450],
+        'صبحگاهی' => [451, 780],
+        'ظهرگاهی' => [781, 1079],
+        'شامگاهی' => [1080, 1439],
+    ];
+}
+
+// تعیین بازه زمانی یک ردیف بر اساس مقدار pub_time (فرمت HH:MM)؛ در صورت نامعتبر بودن رشته خالی برمی‌گرداند
+function rowTimePeriod(string $pubTime): string
+{
+    $t = trim($pubTime);
+    if ($t === '' || !preg_match('/^(\d{1,2}):(\d{1,2})/', $t, $m)) return '';
+    $h = (int)$m[1];
+    $mi = (int)$m[2];
+    if ($h < 0 || $h > 23 || $mi < 0 || $mi > 59) return '';
+    $totalMinutes = $h * 60 + $mi;
+    foreach (timePeriodBoundaries() as $label => [$lo, $hi]) {
+        if ($totalMinutes >= $lo && $totalMinutes <= $hi) return $label;
+    }
+    return '';
+}
+
+function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and', array $timePeriods = []): array
 {
     $activeFileIds = excelActiveFileIds();
     if (empty($activeFileIds)) return [];
     $kws = array_values(array_filter(array_map('trim', $titleKeywords), fn($w) => $w !== ''));
+    $tps = array_values(array_intersect($timePeriods, TIME_PERIOD_LABELS));
     $out = [];
     foreach (jsonRead('excel_rows') as $r) {
         if (!isset($activeFileIds[(int)($r['file_id'] ?? 0)])) continue;
@@ -330,6 +361,7 @@ function rowsInRange(string $from, string $to, string $service = '', string $rol
         }
         if ($newsType !== '' && ($r['news_type'] ?? '') !== $newsType) continue;
         if (!empty($kws) && !titleMatchesKeywords($title, $kws, $keywordMode)) continue;
+        if (!empty($tps) && !in_array(rowTimePeriod((string)($r['pub_time'] ?? '')), $tps, true)) continue;
         $out[] = $r;
     }
     return $out;
@@ -350,10 +382,10 @@ function titleMatchesKeywords(string $title, array $kws, string $mode): bool
     return true;
 }
 
-function distinctValuesInRange(string $from, string $to, string $field, string $service = '', string $site = ''): array
+function distinctValuesInRange(string $from, string $to, string $field, string $service = '', string $site = '', array $timePeriods = []): array
 {
     $set = [];
-    foreach (rowsInRange($from, $to, $service, '', '', '', '', $site) as $r) {
+    foreach (rowsInRange($from, $to, $service, '', '', '', '', $site, [], 'and', $timePeriods) as $r) {
         $v = trim((string)($r[$field] ?? ''));
         if ($v !== '') $set[$v] = true;
     }
