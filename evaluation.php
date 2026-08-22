@@ -10,13 +10,14 @@ require __DIR__ . '/includes/layout_top.php';
 <style>
 .ts-wrapper .ts-control{min-height:calc(1.5em + .75rem + 2px);}
 
-.basic-filters-card{overflow:hidden;}
+.basic-filters-card{overflow:visible;}
 .basic-filters-card .bf-header{
   display:flex; align-items:center; gap:10px;
   margin:-1.5rem -1.5rem 1.25rem -1.5rem;
   padding:14px 1.5rem;
   background:linear-gradient(135deg, var(--navy-1), var(--navy-3));
   color:#fff;
+  border-top-left-radius:inherit; border-top-right-radius:inherit;
 }
 .basic-filters-card .bf-header .bf-icon{
   display:inline-flex; align-items:center; justify-content:center;
@@ -105,6 +106,38 @@ require __DIR__ . '/includes/layout_top.php';
       </div>
     </div>
   </div>
+  <hr class="bf-divider">
+
+  <div class="bf-group-label">
+    <span class="d-inline-flex align-items-center gap-1">
+      <span>بازه زمانی انتشار</span>
+      <span class="info-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
+            title="هیچ‌کدام انتخاب نشود یعنی همه بازه‌ها؛ می‌توانید چند بازه را هم‌زمان انتخاب کنید.">i</span>
+    </span>
+  </div>
+  <div class="row g-2">
+    <div class="col-12">
+      <div class="d-flex flex-wrap gap-3" id="fTimePeriodGroup">
+        <div class="form-check form-check-inline">
+          <input class="form-check-input f-time-period" type="checkbox" id="fTpBamdadi" value="بامدادی">
+          <label class="form-check-label" for="fTpBamdadi">بامدادی <small class="text-muted">(۰۰:۰۰ تا ۰۷:۳۰)</small></label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input f-time-period" type="checkbox" id="fTpSobhgahi" value="صبحگاهی">
+          <label class="form-check-label" for="fTpSobhgahi">صبحگاهی <small class="text-muted">(۰۷:۳۱ تا ۱۳:۰۰)</small></label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input f-time-period" type="checkbox" id="fTpZohrgahi" value="ظهرگاهی">
+          <label class="form-check-label" for="fTpZohrgahi">ظهرگاهی <small class="text-muted">(۱۳:۰۱ تا ۱۷:۵۹)</small></label>
+        </div>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input f-time-period" type="checkbox" id="fTpShamgahi" value="شامگاهی">
+          <label class="form-check-label" for="fTpShamgahi">شامگاهی <small class="text-muted">(۱۸:۰۰ تا ۲۳:۵۹)</small></label>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="filterMsg" class="text-muted small mt-2"></div>
 </div>
 
@@ -335,6 +368,10 @@ function qs(id){ return document.getElementById(id); }
 function currentRange(){ return { from: qs('fFrom').value.trim(), to: qs('fTo').value.trim(), granularity: qs('fGranularity').value }; }
 function currentService(){ return qs('ovcService').value; }
 function currentSite(){ return qs('ovcSite').value; }
+function currentTimePeriods(){ return Array.from(document.querySelectorAll('.f-time-period:checked')).map(el => el.value); }
+document.querySelectorAll('.f-time-period').forEach(el => {
+  el.addEventListener('change', () => { if (qs('reportArea').style.display !== 'none') refreshScope(); });
+});
 
 // ===================== فیلتر سراسری «جست‌وجو در تیتر» (باکس‌های سبز، AND/OR) =====================
 let activeKeywords = [];
@@ -524,7 +561,7 @@ async function loadOverview(){
   const service = currentService();
   const site = currentSite();
   const keyword = currentKeywords();
-  const data = await fetchJson({action:'overview', from, to, service, granularity, site, keyword, keyword_mode: currentKeywordMode()});
+  const data = await fetchJson({action:'overview', from, to, service, granularity, site, keyword, keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
   if (!data.ok) return;
   qs('ovcTotalAll').textContent = data.total_all;
   qs('ovcTotalScope').textContent = data.total_scope;
@@ -549,7 +586,7 @@ async function loadHourly(){
   const site = currentSite();
   const keyword = currentKeywords();
   const newsType = qs('hourlyType').value;
-  const data = await fetchJson({action:'hourly', from, to, service, news_type:newsType, site, keyword, keyword_mode: currentKeywordMode()});
+  const data = await fetchJson({action:'hourly', from, to, service, news_type:newsType, site, keyword, keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
   if (!data.ok) return;
   if (hourlyChart) hourlyChart.destroy();
   hourlyChart = makeComboChart('hourlyChart', data.series, 'تعداد اخبار', 'میانگین بازدید');
@@ -568,7 +605,7 @@ async function loadSubserviceOptions(){
   qs('subEmpty').style.display=''; qs('subBody').style.display='none';
   const {from, to} = currentRange();
   const site = currentSite();
-  const data = await fetchJson({action:'subservices', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode()});
+  const data = await fetchJson({action:'subservices', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
   if (data.ok) fillSelect(qs('subName'), data.items, '— انتخاب کنید —');
 }
 
@@ -579,7 +616,7 @@ async function loadSubserviceChart(){
   const subservice = qs('subName').value;
   const newsType = qs('subType').value;
   if (!subservice){ qs('subBody').style.display='none'; qs('subEmpty').style.display=''; return; }
-  const data = await fetchJson({action:'subservice_series', from, to, service, subservice, granularity, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode()});
+  const data = await fetchJson({action:'subservice_series', from, to, service, subservice, granularity, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
   if (!data.ok) return;
   qs('subEmpty').style.display='none'; qs('subBody').style.display='';
   qs('subTotalCount').textContent = data.total_count;
@@ -596,7 +633,7 @@ async function loadTopSubserviceOptions(){
   const site = currentSite();
   const {from, to} = currentRange();
   if (!service){ fillSelect(qs('topSubservice'), [], 'همه زیرسرویس‌ها'); return; }
-  const data = await fetchJson({action:'subservices', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode()});
+  const data = await fetchJson({action:'subservices', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
   if (data.ok) fillSelect(qs('topSubservice'), data.items, 'همه زیرسرویس‌ها');
 }
 
@@ -607,7 +644,7 @@ async function loadTopNews(){
   const limit = qs('topLimit').value;
   const newsType = qs('topType').value;
   const subservice = qs('topSubservice').value;
-  const data = await fetchJson({action:'top_news', from, to, service, limit, news_type:newsType, subservice, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode()});
+  const data = await fetchJson({action:'top_news', from, to, service, limit, news_type:newsType, subservice, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
   if (data.ok) renderTopNewsTable(data.items);
 }
 
@@ -617,7 +654,7 @@ async function loadPersonOptions(role){
   const {from, to} = currentRange();
   const service = currentService();
   const site = currentSite();
-  const data = await fetchJson({action:'persons', from, to, service, role, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode()});
+  const data = await fetchJson({action:'persons', from, to, service, role, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
   const sel = role === 'reporter' ? qs('repName') : qs('pubName');
   if (data.ok) fillSelect(sel, data.items, '— انتخاب کنید —');
   if (role === 'reporter'){ qs('repBody').style.display='none'; qs('repEmpty').style.display=''; }
@@ -634,7 +671,7 @@ async function loadPersonSection(role){
   const bodyEl = role === 'reporter' ? qs('repBody') : qs('pubBody');
   const emptyEl = role === 'reporter' ? qs('repEmpty') : qs('pubEmpty');
   if (!name){ bodyEl.style.display='none'; emptyEl.style.display=''; return; }
-  const data = await fetchJson({action:'person_series', from, to, service, role, name, granularity, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode()});
+  const data = await fetchJson({action:'person_series', from, to, service, role, name, granularity, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
   if (!data.ok) return;
   emptyEl.style.display='none'; bodyEl.style.display='';
   if (role === 'reporter'){
@@ -722,7 +759,7 @@ async function loadNewsTypeOptionsForScope(){
   const {from, to} = currentRange();
   const service = currentService();
   const site = currentSite();
-  const data = await fetchJson({action:'news_types', from, to, service, site});
+  const data = await fetchJson({action:'news_types', from, to, service, site, time_period: currentTimePeriods()});
   if (!data.ok) return;
   [qs('hourlyType'), qs('repType'), qs('pubType'), qs('subType'), qs('topType')].forEach(sel => { fillSelect(sel, data.items, 'همه انواع خبر'); });
 }

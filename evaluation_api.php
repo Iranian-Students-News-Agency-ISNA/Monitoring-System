@@ -26,6 +26,11 @@ if (!is_array($keywordsRaw)) $keywordsRaw = [$keywordsRaw];
 $keywords = array_values(array_filter(array_map('trim', $keywordsRaw), function($w) { return $w !== ''; }));
 $keywordMode = ($_GET['keyword_mode'] ?? 'and') === 'or' ? 'or' : 'and';
 
+// فیلتر «بازه زمانی انتشار» (بامدادی/صبحگاهی/ظهرگاهی/شامگاهی): می‌تواند چند مقدار همزمان انتخاب شود
+$timePeriodsRaw = $_GET['time_period'] ?? [];
+if (!is_array($timePeriodsRaw)) $timePeriodsRaw = [$timePeriodsRaw];
+$timePeriods = array_values(array_intersect(array_map('trim', $timePeriodsRaw), TIME_PERIOD_LABELS));
+
 if ($from === '' || $to === '') {
     echo json_encode(['ok' => false, 'error' => 'بازه تاریخ نامعتبر است.'], JSON_UNESCAPED_UNICODE);
     exit;
@@ -45,16 +50,16 @@ switch ($action) {
         break;
 
     case 'news_types':
-        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'news_type', $service, $site)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'news_type', $service, $site, $timePeriods)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'subservices':
         if ($service === '') { echo json_encode(['ok' => false, 'error' => 'ابتدا یک سرویس مشخص انتخاب کنید.'], JSON_UNESCAPED_UNICODE); break; }
-        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_sub', $service, $site)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_sub', $service, $site, $timePeriods)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'persons':
-        $rows = rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode);
+        $rows = rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods);
         $field = $role === 'publisher' ? 'publisher' : 'reporter';
         $list = [];
         foreach ($rows as $r) {
@@ -66,8 +71,8 @@ switch ($action) {
         break;
 
     case 'overview':
-        $allRows = rowsInRange($from, $to, '', '', '', '', '', $site, $keywords, $keywordMode);
-        $scopeRows = $service !== '' ? rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode) : $allRows;
+        $allRows = rowsInRange($from, $to, '', '', '', '', '', $site, $keywords, $keywordMode, $timePeriods);
+        $scopeRows = $service !== '' ? rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods) : $allRows;
         $totalAll = count($allRows);
         $totalScope = count($scopeRows);
         $sumViews = array_sum(array_column($scopeRows, 'views'));
@@ -89,14 +94,14 @@ switch ($action) {
         break;
 
     case 'hourly':
-        $rows = rowsInRange($from, $to, $service, '', '', $newsType, '', $site, $keywords, $keywordMode);
+        $rows = rowsInRange($from, $to, $service, '', '', $newsType, '', $site, $keywords, $keywordMode, $timePeriods);
         echo json_encode(['ok' => true, 'series' => buildHourlySeries($rows)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'subservice_series':
         if ($service === '' || $subservice === '') { echo json_encode(['ok' => false, 'error' => 'سرویس یا زیرسرویس انتخاب نشده است.'], JSON_UNESCAPED_UNICODE); break; }
-        $allRows = rowsInRange($from, $to, $service, '', '', '', $subservice, $site, $keywords, $keywordMode);
-        $chartRows = $newsType !== '' ? array_values(array_filter($allRows, function($r) { return ($r['news_type'] ?? '') === $newsType; })) : $allRows;
+        $allRows = rowsInRange($from, $to, $service, '', '', '', $subservice, $site, $keywords, $keywordMode, $timePeriods);
+        $chartRows = $newsType !== '' ? array_values(array_filter($allRows, function($r) use ($newsType) { return ($r['news_type'] ?? '') === $newsType; })) : $allRows;
         echo json_encode([
             'ok' => true,
             'series' => buildSeries($chartRows, $granularity),
@@ -108,8 +113,8 @@ switch ($action) {
 
     case 'person_series':
         if ($name === '') { echo json_encode(['ok' => false, 'error' => 'نامی انتخاب نشده است.'], JSON_UNESCAPED_UNICODE); break; }
-        $allRows = rowsInRange($from, $to, $service, $role, $name, '', '', $site, $keywords, $keywordMode);
-        $chartRows = $newsType !== '' ? array_values(array_filter($allRows, function($r) { return ($r['news_type'] ?? '') === $newsType; })) : $allRows;
+        $allRows = rowsInRange($from, $to, $service, $role, $name, '', '', $site, $keywords, $keywordMode, $timePeriods);
+        $chartRows = $newsType !== '' ? array_values(array_filter($allRows, function($r) use ($newsType) { return ($r['news_type'] ?? '') === $newsType; })) : $allRows;
         echo json_encode([
             'ok' => true,
             'series' => buildSeries($chartRows, $granularity),
@@ -120,7 +125,7 @@ switch ($action) {
         break;
 
     case 'top_news':
-        $rows = rowsInRange($from, $to, $service, '', '', $newsType, $subservice, $site, $keywords, $keywordMode);
+        $rows = rowsInRange($from, $to, $service, '', '', $newsType, $subservice, $site, $keywords, $keywordMode, $timePeriods);
         echo json_encode(['ok' => true, 'items' => topViewedNews($rows, $limit)], JSON_UNESCAPED_UNICODE);
         break;
 
