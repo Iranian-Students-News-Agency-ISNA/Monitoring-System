@@ -7,12 +7,52 @@ require __DIR__ . '/includes/layout_top.php';
 ?>
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
-<style>.ts-wrapper .ts-control{min-height:calc(1.5em + .75rem + 2px);}</style>
+<style>
+.ts-wrapper .ts-control{min-height:calc(1.5em + .75rem + 2px);}
+
+.basic-filters-card{overflow:hidden;}
+.basic-filters-card .bf-header{
+  display:flex; align-items:center; gap:10px;
+  margin:-1.5rem -1.5rem 1.25rem -1.5rem;
+  padding:14px 1.5rem;
+  background:linear-gradient(135deg, var(--navy-1), var(--navy-3));
+  color:#fff;
+}
+.basic-filters-card .bf-header .bf-icon{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:32px; height:32px; border-radius:10px; flex-shrink:0;
+  background:rgba(255,255,255,.15); font-size:1rem;
+}
+.basic-filters-card .bf-header h6{margin:0; font-weight:700;}
+.basic-filters-card .bf-header small{opacity:.8;}
+.bf-group-label{
+  font-size:.72rem; font-weight:700; color:#8a93a6;
+  letter-spacing:.02em; margin-bottom:.6rem;
+}
+.bf-divider{border:none; border-top:1px dashed #e3e8f2; margin:1.25rem 0;}
+.info-icon{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px; border-radius:50%; border:1px solid #dfe4ee;
+  background:#eef2fa; color:var(--navy-2); font-size:.72rem; font-weight:700;
+  font-style:italic; font-family:Georgia,'Times New Roman',serif;
+  cursor:help; user-select:none; flex-shrink:0;
+}
+.info-icon:hover, .info-icon:focus{ background:var(--navy-2); color:#fff; outline:none; }
+</style>
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <h5 class="mb-0">ارزیابی</h5>
 </div>
 
-<div class="card shadow-sm p-4 mb-4">
+<div class="card shadow-sm p-4 mb-4 basic-filters-card">
+  <div class="bf-header">
+    <span class="bf-icon">⏱</span>
+    <div>
+      <h6>فیلترهای پایه</h6>
+      <small>بازه زمانی، سرویس و جست‌وجوی سراسری گزارش را از اینجا تنظیم کنید</small>
+    </div>
+  </div>
+
+  <div class="bf-group-label">بازه گزارش</div>
   <div class="row g-3 align-items-end">
     <div class="col-md-3">
       <label class="form-label">از تاریخ</label>
@@ -33,7 +73,11 @@ require __DIR__ . '/includes/layout_top.php';
       <button id="btnLoad" class="btn btn-primary">نمایش</button>
     </div>
   </div>
-  <div class="row g-3 align-items-end mt-1">
+
+  <hr class="bf-divider">
+
+  <div class="bf-group-label">فیلترهای تکمیلی</div>
+  <div class="row g-3 align-items-end">
     <div class="col-md-3">
       <label class="form-label">زبان</label>
       <select id="ovcSite" class="form-select"><option value="">همه</option></select>
@@ -43,8 +87,12 @@ require __DIR__ . '/includes/layout_top.php';
       <select id="ovcService" class="form-select"><option value="">همه سرویس‌ها (کل ایسنا)</option></select>
     </div>
     <div class="col-md-6">
-      <div class="d-flex justify-content-between align-items-center">
-        <label class="form-label mb-0">جست‌وجو در تیتر (فیلتر کل صفحه)</label>
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="d-flex align-items-center gap-1">
+          <label class="form-label mb-0">جست‌وجو در تیتر (فیلتر کل صفحه)</label>
+          <span class="info-icon" tabindex="0" data-bs-toggle="tooltip" data-bs-placement="top"
+                title="هر عبارت را بنویسید و Enter بزنید؛ به‌صورت باکس سبز اضافه می‌شود. با «AND» باید همهٔ باکس‌ها در تیتر باشند، با «OR» کافی است یکی از آن‌ها باشد.">i</span>
+        </div>
         <div class="btn-group btn-group-sm" role="group" aria-label="حالت ترکیب کلمات">
           <input type="radio" class="btn-check" name="fKeywordMode" id="fKwModeAnd" value="and" checked>
           <label class="btn btn-outline-primary" for="fKwModeAnd">همهٔ کلمات (AND)</label>
@@ -55,7 +103,6 @@ require __DIR__ . '/includes/layout_top.php';
       <div id="fKeywordBox" class="form-control d-flex flex-wrap align-items-center gap-1 mt-1" style="min-height:calc(1.5em + .75rem + 2px); height:auto; cursor:text;">
         <input type="text" id="fKeywordInput" placeholder="کلمه/عبارت + Enter" style="border:0; outline:0; flex:1; min-width:120px; padding:2px;">
       </div>
-      <div class="form-text">هر عبارت را بنویسید و Enter بزنید؛ به‌صورت باکس سبز اضافه می‌شود. با «AND» باید همهٔ باکس‌ها در تیتر باشند، با «OR» کافی است یکی از آن‌ها باشد.</div>
     </div>
   </div>
   <div id="filterMsg" class="text-muted small mt-2"></div>
@@ -752,7 +799,12 @@ function attachSelectSearch(selectId){
 ['hourlyType','subName','subType','topType','topSubservice','repName','repType','pubName','pubType','qcSubservice','qcReporter','qcNewsType']
   .forEach(attachSelectSearch);
 
-document.addEventListener('DOMContentLoaded', fullReload);
+document.addEventListener('DOMContentLoaded', function(){
+  fullReload();
+  document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el){
+    new bootstrap.Tooltip(el);
+  });
+});
 </script>
 
 <?php require __DIR__ . '/includes/layout_bottom.php'; ?>
