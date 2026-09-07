@@ -65,9 +65,8 @@ function trendsSelectCoverage(array $newsItems): array
     return ['isna' => $isna, 'others' => $others];
 }
 
-// برای گزارش «همه رسانه‌ها»: از بین منابع خبری یک ترند (بدون محدودیت به خبرگزاری خاص)،
-// تعداد تکرار هر منبع را می‌شمارد و فقط منبع(هایی) با بیشترین میزان تکرار را نگه می‌دارد.
-function trendsSelectTopRepeatedCoverage(array $newsItems): array
+// شمارش تعداد تکرار هر منبع در یک لیست خبر (بدون محدودیت به خبرگزاری خاص)
+function trendsCountSources(array $newsItems): array
 {
     $bySource = [];
     foreach ($newsItems as $ni) {
@@ -78,6 +77,12 @@ function trendsSelectTopRepeatedCoverage(array $newsItems): array
         }
         $bySource[$src]['count']++;
     }
+    return $bySource;
+}
+
+// از بین شمارش‌های منابع، فقط منبع(هایی) با بیشترین میزان تکرار را برمی‌گرداند
+function trendsTopFromCounts(array $bySource): array
+{
     if (empty($bySource)) return [];
     $max = max(array_column($bySource, 'count'));
     $out = [];
@@ -89,25 +94,45 @@ function trendsSelectTopRepeatedCoverage(array $newsItems): array
     return $out;
 }
 
+// برای گزارش «همه رسانه‌ها»: از بین منابع خبری یک ترند، فقط منبع(هایی) با بیشترین میزان تکرار را نگه می‌دارد.
+function trendsSelectTopRepeatedCoverage(array $newsItems): array
+{
+    return trendsTopFromCounts(trendsCountSources($newsItems));
+}
+
 // ذخیره‌ی آرشیو روزانه (تاریخ شمسی) ترندها با پوشش همه‌ی رسانه‌ها، برای صفحه‌ی گزارش ترندها
+// این تابع هر بار (هر ۳۰ دقیقه) فراخوانی می‌شود؛ به‌جای جایگزینی کامل روز، شمارش منابع را
+// با آنچه قبلاً همان روز ذخیره شده جمع می‌زند تا هیچ ترند/خبری از چک‌های قبلی گم نشود.
 function trendsArchiveDaily(array $trends): void
 {
     $nowIran = new DateTime('now', new DateTimeZone('Asia/Tehran'));
     [$jy, $jm, $jd] = gregorianToJalali((int)$nowIran->format('Y'), (int)$nowIran->format('n'), (int)$nowIran->format('j'));
     $jdate = sprintf('%04d/%02d/%02d', $jy, $jm, $jd);
     $fetchedAtLabel = jalaliDateLabel($jdate) . ' - ساعت ' . $nowIran->format('H:i') . ' (به وقت ایران)';
-    $items = [];
-    foreach ($trends as $t) {
-        $coverage = trendsSelectTopRepeatedCoverage($t['news_items']);
-        if (empty($coverage)) continue; // ترند بدون هیچ خبر مرتبطی نمایش داده نمی‌شود
-        $items[] = [
-            'keyword'  => $t['keyword'],
-            'traffic'  => $t['traffic'],
-            'coverage' => $coverage,
-        ];
-    }
-    jsonUpdate('google_trends_archive', function ($old) use ($jdate, $items, $fetchedAtLabel) {
-        $old[$jdate] = ['fetched_at' => $fetchedAtLabel, 'trends' => $items];
+
+    jsonUpdate('google_trends_archive', function ($old) use ($jdate, $trends, $fetchedAtLabel) {
+        $byKeyword = [];
+        foreach (($old[$jdate]['trends'] ?? []) as $t) {
+            $byKeyword[$t['keyword']] = $t;
+        }
+        foreach ($trends as $t) {
+            $counts = trendsCountSources($t['news_items']);
+            $kw = $t['keyword'];
+            if (!isset($byKeyword[$kw])) {
+                if (empty($counts)) continue; // ترند بدون هیچ خبر مرتبطی نمایش داده نمی‌شود
+                $byKeyword[$kw] = ['keyword' => $kw, 'traffic' => $t['traffic'], 'source_counts' => []];
+            } elseif (trendsTrafficValue($t['traffic']) > trendsTrafficValue($byKeyword[$kw]['traffic'])) {
+                $byKeyword[$kw]['traffic'] = $t['traffic'];
+            }
+            foreach ($counts as $src => $d) {
+                if (!isset($byKeyword[$kw]['source_counts'][$src])) {
+                    $byKeyword[$kw]['source_counts'][$src] = $d;
+                } else {
+                    $byKeyword[$kw]['source_counts'][$src]['count'] += $d['count'];
+                }
+            }
+        }
+        $old[$jdate] = ['fetched_at' => $fetchedAtLabel, 'trends' => array_values($byKeyword)];
         return $old;
     });
 }
@@ -155,20 +180,25 @@ function trendsGetRangeMerged(string $from, string $to): array
             $kw = $t['keyword'] ?? '';
             if ($kw === '') continue;
             if (!isset($merged[$kw])) {
-                $merged[$kw] = ['keyword' => $kw, 'date' => $d, 'coverage' => [], 'traffic' => $t['traffic'] ?? ''];
+                $merged[$kw] = ['keyword' => $kw, 'date' => $d, 'traffic' => $t['traffic'] ?? '', 'source_counts' => []];
             } elseif (trendsTrafficValue($t['traffic'] ?? '') > trendsTrafficValue($merged[$kw]['traffic'])) {
                 $merged[$kw]['traffic'] = $t['traffic'];
             }
-            foreach ($t['coverage'] ?? [] as $c) {
-                $ag = $c['agency'] ?? '';
-                if ($ag === '' || isset($merged[$kw]['coverage'][$ag])) continue;
-                $merged[$kw]['coverage'][$ag] = $c;
+            foreach ($t['source_counts'] ?? [] as $src => $d2) {
+                if (!isset($merged[$kw]['source_counts'][$src])) {
+                    $merged[$kw]['source_counts'][$src] = $d2;
+                } else {
+                    $merged[$kw]['source_counts'][$src]['count'] += $d2['count'];
+                }
             }
         }
     }
     $out = array_values($merged);
     usort($out, fn($a, $b) => trendsTrafficValue($b['traffic']) <=> trendsTrafficValue($a['traffic']));
-    foreach ($out as &$t) { $t['coverage'] = array_values($t['coverage']); }
+    foreach ($out as &$t) {
+        $t['coverage'] = trendsTopFromCounts($t['source_counts']);
+        unset($t['source_counts']);
+    }
     unset($t);
     return $out;
 }
@@ -187,9 +217,13 @@ function trendsPruneOldNonIsna(): void
             if (j2d($jy, $jm, $jd) > $cutoffJdn) continue; // فقط روزهای قدیمی‌تر از ۸ روز
             $newTrends = [];
             foreach ($day['trends'] ?? [] as $t) {
-                $isnaOnly = array_values(array_filter($t['coverage'] ?? [], fn($c) => mb_strpos($c['agency'] ?? '', 'ایسنا') !== false));
+                $isnaOnly = array_filter(
+                    $t['source_counts'] ?? [],
+                    fn($src) => mb_strpos($src, 'ایسنا') !== false,
+                    ARRAY_FILTER_USE_KEY
+                );
                 if (empty($isnaOnly)) continue; // ترندی که ایسنا پوشش نداده، از آرشیو قدیمی حذف می‌شود
-                $t['coverage'] = $isnaOnly;
+                $t['source_counts'] = $isnaOnly;
                 $newTrends[] = $t;
             }
             $archive[$jdate]['trends'] = $newTrends;
