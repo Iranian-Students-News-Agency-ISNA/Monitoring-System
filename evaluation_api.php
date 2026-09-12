@@ -35,6 +35,19 @@ $timePeriodsRaw = $_GET['time_period'] ?? [];
 if (!is_array($timePeriodsRaw)) $timePeriodsRaw = [$timePeriodsRaw];
 $timePeriods = array_values(array_intersect(array_map('trim', $timePeriodsRaw), TIME_PERIOD_LABELS));
 
+// فیلترهای پیشرفته سراسری (چندانتخابی): خبرنگار، ناشر، نوع خبر - روی کل صفحه اعمال می‌شوند
+$advReportersRaw = $_GET['adv_reporter'] ?? [];
+if (!is_array($advReportersRaw)) $advReportersRaw = [$advReportersRaw];
+$advReporters = array_values(array_filter(array_map('trim', $advReportersRaw), fn($s) => $s !== ''));
+
+$advPublishersRaw = $_GET['adv_publisher'] ?? [];
+if (!is_array($advPublishersRaw)) $advPublishersRaw = [$advPublishersRaw];
+$advPublishers = array_values(array_filter(array_map('trim', $advPublishersRaw), fn($s) => $s !== ''));
+
+$advNewsTypesRaw = $_GET['adv_news_type'] ?? [];
+if (!is_array($advNewsTypesRaw)) $advNewsTypesRaw = [$advNewsTypesRaw];
+$advNewsTypes = array_values(array_filter(array_map('trim', $advNewsTypesRaw), fn($s) => $s !== ''));
+
 if ($from === '' || $to === '') {
     echo json_encode(['ok' => false, 'error' => 'بازه تاریخ نامعتبر است.'], JSON_UNESCAPED_UNICODE);
     exit;
@@ -50,20 +63,35 @@ switch ($action) {
         break;
 
     case 'services':
-        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_main', '', $site)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_main', '', $site, [], $advReporters, $advPublishers, $advNewsTypes)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'news_types':
-        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'news_type', $service, $site, $timePeriods)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'news_type', $service, $site, $timePeriods, $advReporters, $advPublishers, $advNewsTypes)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'subservices':
         if (count($services) === 0) { echo json_encode(['ok' => false, 'error' => 'ابتدا یک یا چند سرویس مشخص انتخاب کنید.'], JSON_UNESCAPED_UNICODE); break; }
-        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_sub', $service, $site, $timePeriods)], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => true, 'items' => distinctValuesInRange($from, $to, 'service_sub', $service, $site, $timePeriods, $advReporters, $advPublishers, $advNewsTypes)], JSON_UNESCAPED_UNICODE);
+        break;
+
+    // ===== گزینه‌های فیلترهای پیشرفته: بر اساس فیلترهای پایه (بازه/سرویس/سایت/جست‌وجو/بازه انتشار) =====
+    case 'adv_options':
+        $baseRows = rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods);
+        $repSet = []; $pubSet = []; $typeSet = [];
+        foreach ($baseRows as $r) {
+            $rep = trim((string)($r['reporter'] ?? '')); if ($rep !== '') $repSet[$rep] = true;
+            $pub = trim((string)($r['publisher'] ?? '')); if ($pub !== '') $pubSet[$pub] = true;
+            $nt  = trim((string)($r['news_type'] ?? '')); if ($nt !== '') $typeSet[$nt] = true;
+        }
+        $reporters = array_keys($repSet); sort($reporters, SORT_FLAG_CASE | SORT_STRING);
+        $publishers = array_keys($pubSet); sort($publishers, SORT_FLAG_CASE | SORT_STRING);
+        $newsTypesList = array_keys($typeSet); sort($newsTypesList, SORT_FLAG_CASE | SORT_STRING);
+        echo json_encode(['ok' => true, 'reporters' => $reporters, 'publishers' => $publishers, 'news_types' => $newsTypesList], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'persons':
-        $rows = rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods);
+        $rows = rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
         $field = $role === 'publisher' ? 'publisher' : 'reporter';
         $list = [];
         foreach ($rows as $r) {
@@ -75,8 +103,8 @@ switch ($action) {
         break;
 
     case 'overview':
-        $allRows = rowsInRange($from, $to, '', '', '', '', '', $site, $keywords, $keywordMode, $timePeriods);
-        $scopeRows = $service !== '' ? rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods) : $allRows;
+        $allRows = rowsInRange($from, $to, '', '', '', '', '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
+        $scopeRows = $service !== '' ? rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes) : $allRows;
         $totalAll = count($allRows);
         $totalScope = count($scopeRows);
         $sumViews = array_sum(array_column($scopeRows, 'views'));
@@ -98,13 +126,13 @@ switch ($action) {
         break;
 
     case 'hourly':
-        $rows = rowsInRange($from, $to, $service, '', '', $newsType, '', $site, $keywords, $keywordMode, $timePeriods);
+        $rows = rowsInRange($from, $to, $service, '', '', $newsType, '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
         echo json_encode(['ok' => true, 'series' => buildHourlySeries($rows)], JSON_UNESCAPED_UNICODE);
         break;
 
     case 'subservice_series':
         if ($service === '' || $subservice === '') { echo json_encode(['ok' => false, 'error' => 'سرویس یا زیرسرویس انتخاب نشده است.'], JSON_UNESCAPED_UNICODE); break; }
-        $allRows = rowsInRange($from, $to, $service, '', '', '', $subservice, $site, $keywords, $keywordMode, $timePeriods);
+        $allRows = rowsInRange($from, $to, $service, '', '', '', $subservice, $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
         $chartRows = $newsType !== '' ? array_values(array_filter($allRows, function($r) use ($newsType) { return ($r['news_type'] ?? '') === $newsType; })) : $allRows;
         echo json_encode([
             'ok' => true,
@@ -117,7 +145,7 @@ switch ($action) {
 
     case 'person_series':
         if ($name === '') { echo json_encode(['ok' => false, 'error' => 'نامی انتخاب نشده است.'], JSON_UNESCAPED_UNICODE); break; }
-        $allRows = rowsInRange($from, $to, $service, $role, $name, '', '', $site, $keywords, $keywordMode, $timePeriods);
+        $allRows = rowsInRange($from, $to, $service, $role, $name, '', '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
         $chartRows = $newsType !== '' ? array_values(array_filter($allRows, function($r) use ($newsType) { return ($r['news_type'] ?? '') === $newsType; })) : $allRows;
         echo json_encode([
             'ok' => true,
@@ -129,7 +157,7 @@ switch ($action) {
         break;
 
     case 'top_news':
-        $rows = rowsInRange($from, $to, $service, '', '', $newsType, $subservice, $site, $keywords, $keywordMode, $timePeriods);
+        $rows = rowsInRange($from, $to, $service, '', '', $newsType, $subservice, $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
         echo json_encode(['ok' => true, 'items' => topViewedNews($rows, $limit)], JSON_UNESCAPED_UNICODE);
         break;
 
@@ -177,7 +205,7 @@ switch ($action) {
 
     case 'qc_reporters':
         $set = [];
-        foreach (newsEntriesInRange($from, $to, $service, '', '', '', $site, $keywords, $keywordMode) as $r) {
+        foreach (newsEntriesInRange($from, $to, $service, '', '', '', $site, $keywords, $keywordMode, $advReporters, $advPublishers, $advNewsTypes) as $r) {
             $v = trim((string)($r['reporter'] ?? ''));
             if ($v !== '') $set[$v] = true;
         }
@@ -188,7 +216,7 @@ switch ($action) {
 
     case 'qc_news_types':
         $set = [];
-        foreach (newsEntriesInRange($from, $to, $service, '', '', '', $site, $keywords, $keywordMode) as $r) {
+        foreach (newsEntriesInRange($from, $to, $service, '', '', '', $site, $keywords, $keywordMode, $advReporters, $advPublishers, $advNewsTypes) as $r) {
             $v = trim((string)($r['news_type'] ?? ''));
             if ($v !== '') $set[$v] = true;
         }
@@ -198,8 +226,8 @@ switch ($action) {
         break;
 
     case 'qc_summary':
-        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site, $keywords, $keywordMode);
-        $totalRows = rowsInRange($from, $to, $service, $reporter !== '' ? 'reporter' : '', $reporter, $newsType, $subservice, $site, $keywords, $keywordMode);
+        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site, $keywords, $keywordMode, $advReporters, $advPublishers, $advNewsTypes);
+        $totalRows = rowsInRange($from, $to, $service, $reporter !== '' ? 'reporter' : '', $reporter, $newsType, $subservice, $site, $keywords, $keywordMode, [], $advReporters, $advPublishers, $advNewsTypes);
         $reviewedCount = count($reviewed);
         $totalCount = count($totalRows);
         echo json_encode([
@@ -211,7 +239,7 @@ switch ($action) {
         break;
 
     case 'qc_items':
-        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site, $keywords, $keywordMode);
+        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site, $keywords, $keywordMode, $advReporters, $advPublishers, $advNewsTypes);
         $items = [];
         foreach ($reviewed as $r) {
             $items[] = [
@@ -232,7 +260,7 @@ switch ($action) {
         break;
 
     case 'qc_match':
-        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site, $keywords, $keywordMode);
+        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site, $keywords, $keywordMode, $advReporters, $advPublishers, $advNewsTypes);
         $match = 0; $mismatch = 0; $incomplete = 0;
         foreach ($reviewed as $r) {
             $nt = trim((string)($r['news_type'] ?? ''));
@@ -248,7 +276,7 @@ switch ($action) {
         break;
 
     case 'qc_elements':
-        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site, $keywords, $keywordMode);
+        $reviewed = newsEntriesInRange($from, $to, $service, $subservice, $reporter, $newsType, $site, $keywords, $keywordMode, $advReporters, $advPublishers, $advNewsTypes);
         $counts = ['رعایت شده است' => 0, 'رعایت نشده است' => 0, 'سایر' => 0, 'ثبت نشده' => 0];
         foreach ($reviewed as $r) { $counts[newsElementsStatus($r)]++; }
         $items = [];
