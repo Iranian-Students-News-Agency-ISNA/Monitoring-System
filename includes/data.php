@@ -348,7 +348,16 @@ function serviceFilterMatches(string $serviceFilter, string $value): bool
     return in_array($value, explode(',', $serviceFilter), true);
 }
 
-function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and', array $timePeriods = []): array
+// فیلترهای پیشرفته سراسری (لیست خبرنگاران/ناشران/انواع خبر) که روی کل صفحهٔ ارزیابی اعمال می‌شوند
+function advFiltersMatch(array $r, array $advReporters, array $advPublishers, array $advNewsTypes): bool
+{
+    if (!empty($advReporters) && !in_array(trim((string)($r['reporter'] ?? '')), $advReporters, true)) return false;
+    if (!empty($advPublishers) && !in_array(trim((string)($r['publisher'] ?? '')), $advPublishers, true)) return false;
+    if (!empty($advNewsTypes) && !in_array(trim((string)($r['news_type'] ?? '')), $advNewsTypes, true)) return false;
+    return true;
+}
+
+function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and', array $timePeriods = [], array $advReporters = [], array $advPublishers = [], array $advNewsTypes = []): array
 {
     $activeFileIds = excelActiveFileIds();
     if (empty($activeFileIds)) return [];
@@ -371,6 +380,7 @@ function rowsInRange(string $from, string $to, string $service = '', string $rol
         if ($newsType !== '' && ($r['news_type'] ?? '') !== $newsType) continue;
         if (!empty($kws) && !titleMatchesKeywords($title, $kws, $keywordMode)) continue;
         if (!empty($tps) && !in_array(rowTimePeriod((string)($r['pub_time'] ?? '')), $tps, true)) continue;
+        if (!advFiltersMatch($r, $advReporters, $advPublishers, $advNewsTypes)) continue;
         $out[] = $r;
     }
     return $out;
@@ -391,10 +401,10 @@ function titleMatchesKeywords(string $title, array $kws, string $mode): bool
     return true;
 }
 
-function distinctValuesInRange(string $from, string $to, string $field, string $service = '', string $site = '', array $timePeriods = []): array
+function distinctValuesInRange(string $from, string $to, string $field, string $service = '', string $site = '', array $timePeriods = [], array $advReporters = [], array $advPublishers = [], array $advNewsTypes = []): array
 {
     $set = [];
-    foreach (rowsInRange($from, $to, $service, '', '', '', '', $site, [], 'and', $timePeriods) as $r) {
+    foreach (rowsInRange($from, $to, $service, '', '', '', '', $site, [], 'and', $timePeriods, $advReporters, $advPublishers, $advNewsTypes) as $r) {
         $v = trim((string)($r[$field] ?? ''));
         if ($v !== '') $set[$v] = true;
     }
@@ -570,10 +580,10 @@ function topViewedNews(array $rows, int $limit): array
 // ===================== ارزیابی: بررسی کیفی (بر پایه news_entries نظارت) =====================
 
 // ردیف‌های نظارت (news_entries) در یک بازه، با فیلتر سرویس/زیرسرویس/خبرنگار/نوع خبر
-function newsEntriesInRange(string $from, string $to, string $service = '', string $subservice = '', string $reporter = '', string $newsType = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and'): array
+function newsEntriesInRange(string $from, string $to, string $service = '', string $subservice = '', string $reporter = '', string $newsType = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and', array $advReporters = [], array $advPublishers = [], array $advNewsTypes = []): array
 {
     $kws = array_values(array_filter(array_map('trim', $titleKeywords), fn($w) => $w !== ''));
-    $out = array_values(array_filter(jsonRead('news_entries'), function ($r) use ($from, $to, $service, $subservice, $reporter, $newsType, $site, $kws, $keywordMode) {
+    $out = array_values(array_filter(jsonRead('news_entries'), function ($r) use ($from, $to, $service, $subservice, $reporter, $newsType, $site, $kws, $keywordMode, $advReporters, $advPublishers, $advNewsTypes) {
         $d = $r['entry_date'] ?? '';
         if ($d === '' || $d < $from || $d > $to) return false;
         if ($site !== '' && ($r['site'] ?? '') !== $site) return false;
@@ -582,6 +592,7 @@ function newsEntriesInRange(string $from, string $to, string $service = '', stri
         if ($reporter !== '' && ($r['reporter'] ?? '') !== $reporter) return false;
         if ($newsType !== '' && ($r['news_type'] ?? '') !== $newsType) return false;
         if (!empty($kws) && !titleMatchesKeywords((string)($r['title'] ?? ''), $kws, $keywordMode)) return false;
+        if (!advFiltersMatch($r, $advReporters, $advPublishers, $advNewsTypes)) return false;
         return true;
     }));
     usort($out, fn($a, $b) => ($b['entry_date'] ?? '') <=> ($a['entry_date'] ?? '') ?: ($b['id'] ?? 0) <=> ($a['id'] ?? 0));
