@@ -144,6 +144,36 @@ require __DIR__ . '/includes/layout_top.php';
   <div id="filterMsg" class="text-muted small mt-2"></div>
 </div>
 
+<div class="card shadow-sm mb-4 basic-filters-card">
+  <div class="p-4">
+    <button type="button" class="bf-header w-100 border-0 text-start" style="cursor:pointer;"
+            data-bs-toggle="collapse" data-bs-target="#advFiltersBody" aria-expanded="false" aria-controls="advFiltersBody">
+      <span class="bf-icon" id="advFiltersChevron">▾</span>
+      <div>
+        <h6 class="mb-0">فیلترهای پیشرفته</h6>
+        <small>خبرنگار، ناشر و نوع خبر — بر پایهٔ فیلترهای پایه بالا و اعمال‌شونده روی کل صفحه</small>
+      </div>
+    </button>
+    <div class="collapse" id="advFiltersBody">
+      <hr class="bf-divider">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">خبرنگار</label>
+          <select id="advReporter" class="form-select" multiple></select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">ناشر</label>
+          <select id="advPublisher" class="form-select" multiple></select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">نوع خبر</label>
+          <select id="advNewsType" class="form-select" multiple></select>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="reportArea" style="display:none">
 
   <!-- آمار کلی -->
@@ -449,6 +479,48 @@ qs('fKeywordInput').addEventListener('keydown', (e) => {
 });
 qs('fKeywordBox').addEventListener('click', () => qs('fKeywordInput').focus());
 
+// ===================== فیلترهای پیشرفته سراسری (خبرنگار/ناشر/نوع خبر) روی کل صفحه =====================
+document.getElementById('advFiltersBody').addEventListener('show.bs.collapse', () => { qs('advFiltersChevron').textContent = '▴'; });
+document.getElementById('advFiltersBody').addEventListener('hide.bs.collapse', () => { qs('advFiltersChevron').textContent = '▾'; });
+
+function multiSelectValues(sel){
+  return sel.tomselect ? sel.tomselect.getValue() : Array.from(sel.selectedOptions).map(o => o.value);
+}
+function currentAdvReporters(){ return multiSelectValues(qs('advReporter')); }
+function currentAdvPublishers(){ return multiSelectValues(qs('advPublisher')); }
+function currentAdvNewsTypes(){ return multiSelectValues(qs('advNewsType')); }
+function advParams(){ return { adv_reporter: currentAdvReporters(), adv_publisher: currentAdvPublishers(), adv_news_type: currentAdvNewsTypes() }; }
+
+function fillMultiSelect(sel, items){
+  if (sel.tomselect){
+    const ts = sel.tomselect;
+    const prev = ts.getValue();
+    ts.clearOptions();
+    items.forEach(v => ts.addOption({value:v, text:v}));
+    ts.refreshOptions(false);
+    ts.setValue(prev.filter(v => items.includes(v)), true);
+    return;
+  }
+  const prev = Array.from(sel.selectedOptions).map(o => o.value);
+  sel.innerHTML = '';
+  items.forEach(v => { const o = document.createElement('option'); o.value = v; o.textContent = v; if (prev.includes(v)) o.selected = true; sel.appendChild(o); });
+}
+
+async function loadAdvFilterOptions(){
+  const {from, to} = currentRange();
+  const service = currentService();
+  const site = currentSite();
+  const data = await fetchJson({action:'adv_options', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  if (!data.ok) return;
+  fillMultiSelect(qs('advReporter'), data.reporters);
+  fillMultiSelect(qs('advPublisher'), data.publishers);
+  fillMultiSelect(qs('advNewsType'), data.news_types);
+}
+
+['advReporter','advPublisher','advNewsType'].forEach(id => {
+  qs(id).addEventListener('change', () => { if (qs('reportArea').style.display !== 'none') refreshScope(); });
+});
+
 async function fetchJson(params){
   const usp = new URLSearchParams();
   Object.entries(params).forEach(([k, v]) => {
@@ -590,7 +662,7 @@ async function loadSiteOptions(){
 async function loadServiceOptions(){
   const {from, to} = currentRange();
   const site = currentSite();
-  const data = await fetchJson({action:'services', from, to, site});
+  const data = await fetchJson({action:'services', from, to, site, ...advParams()});
   const menu = qs('ovcServiceMenu');
   menu.innerHTML = '';
   const items = data.ok ? data.items : [];
@@ -619,7 +691,7 @@ async function loadOverview(){
   const service = currentService();
   const site = currentSite();
   const keyword = currentKeywords();
-  const data = await fetchJson({action:'overview', from, to, service, granularity, site, keyword, keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'overview', from, to, service, granularity, site, keyword, keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), ...advParams()});
   if (!data.ok) return;
   qs('ovcTotalAll').textContent = data.total_all;
   qs('ovcTotalScope').textContent = data.total_scope;
@@ -644,7 +716,7 @@ async function loadHourly(){
   const site = currentSite();
   const keyword = currentKeywords();
   const newsType = qs('hourlyType').value;
-  const data = await fetchJson({action:'hourly', from, to, service, news_type:newsType, site, keyword, keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'hourly', from, to, service, news_type:newsType, site, keyword, keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), ...advParams()});
   if (!data.ok) return;
   if (hourlyChart) hourlyChart.destroy();
   hourlyChart = makeComboChart('hourlyChart', data.series, 'تعداد اخبار', 'میانگین بازدید');
@@ -663,7 +735,7 @@ async function loadSubserviceOptions(){
   qs('subEmpty').style.display=''; qs('subBody').style.display='none';
   const {from, to} = currentRange();
   const site = currentSite();
-  const data = await fetchJson({action:'subservices', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'subservices', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), ...advParams()});
   if (data.ok) fillSelect(qs('subName'), data.items, '— انتخاب کنید —');
 }
 
@@ -674,7 +746,7 @@ async function loadSubserviceChart(){
   const subservice = qs('subName').value;
   const newsType = qs('subType').value;
   if (!subservice){ qs('subBody').style.display='none'; qs('subEmpty').style.display=''; return; }
-  const data = await fetchJson({action:'subservice_series', from, to, service, subservice, granularity, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'subservice_series', from, to, service, subservice, granularity, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), ...advParams()});
   if (!data.ok) return;
   qs('subEmpty').style.display='none'; qs('subBody').style.display='';
   qs('subTotalCount').textContent = data.total_count;
@@ -691,7 +763,7 @@ async function loadTopSubserviceOptions(){
   const site = currentSite();
   const {from, to} = currentRange();
   if (selectedServices.length === 0){ fillSelect(qs('topSubservice'), [], 'همه زیرسرویس‌ها'); return; }
-  const data = await fetchJson({action:'subservices', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'subservices', from, to, service, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), ...advParams()});
   if (data.ok) fillSelect(qs('topSubservice'), data.items, 'همه زیرسرویس‌ها');
 }
 
@@ -702,7 +774,7 @@ async function loadTopNews(){
   const limit = qs('topLimit').value;
   const newsType = qs('topType').value;
   const subservice = qs('topSubservice').value;
-  const data = await fetchJson({action:'top_news', from, to, service, limit, news_type:newsType, subservice, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'top_news', from, to, service, limit, news_type:newsType, subservice, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), ...advParams()});
   if (data.ok) renderTopNewsTable(data.items);
 }
 
@@ -719,7 +791,7 @@ async function loadPersonOptions(role){
   const {from, to} = currentRange();
   const service = currentService();
   const site = currentSite();
-  const data = await fetchJson({action:'persons', from, to, service, role, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'persons', from, to, service, role, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), ...advParams()});
   const sel = role === 'reporter' ? qs('repName') : qs('pubName');
   if (data.ok) fillSelect(sel, data.items, '— انتخاب کنید —');
   if (role === 'reporter'){ qs('repBody').style.display='none'; qs('repEmpty').style.display=''; }
@@ -736,7 +808,7 @@ async function loadPersonSection(role){
   const bodyEl = role === 'reporter' ? qs('repBody') : qs('pubBody');
   const emptyEl = role === 'reporter' ? qs('repEmpty') : qs('pubEmpty');
   if (!name){ bodyEl.style.display='none'; emptyEl.style.display=''; return; }
-  const data = await fetchJson({action:'person_series', from, to, service, role, name, granularity, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'person_series', from, to, service, role, name, granularity, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), ...advParams()});
   if (!data.ok) return;
   emptyEl.style.display='none'; bodyEl.style.display='';
   if (role === 'reporter'){
@@ -760,9 +832,9 @@ async function loadQcOptions(){
   const site = currentSite();
   const kw = currentKeywords();
   const [subRes, repRes, typeRes] = await Promise.all([
-    service ? fetchJson({action:'subservices', from, to, service, site, keyword: kw, keyword_mode: currentKeywordMode()}) : Promise.resolve({ok:false, items:[]}),
-    fetchJson({action:'qc_reporters', from, to, service, site, keyword: kw, keyword_mode: currentKeywordMode()}),
-    fetchJson({action:'qc_news_types', from, to, service, site, keyword: kw, keyword_mode: currentKeywordMode()}),
+    service ? fetchJson({action:'subservices', from, to, service, site, keyword: kw, keyword_mode: currentKeywordMode(), ...advParams()}) : Promise.resolve({ok:false, items:[]}),
+    fetchJson({action:'qc_reporters', from, to, service, site, keyword: kw, keyword_mode: currentKeywordMode(), ...advParams()}),
+    fetchJson({action:'qc_news_types', from, to, service, site, keyword: kw, keyword_mode: currentKeywordMode(), ...advParams()}),
   ]);
   fillSelect(qs('qcSubservice'), subRes.ok ? subRes.items : [], 'همه زیرسرویس‌ها');
   fillSelect(qs('qcReporter'), repRes.ok ? repRes.items : [], 'همه خبرنگاران');
@@ -787,7 +859,7 @@ async function loadQcSection(){
   const subservice = qs('qcSubservice').value;
   const reporter = qs('qcReporter').value;
   const newsType = qs('qcNewsType').value;
-  const params = {from, to, service, subservice, reporter, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode()};
+  const params = {from, to, service, subservice, reporter, news_type:newsType, site, keyword: currentKeywords(), keyword_mode: currentKeywordMode(), ...advParams()};
 
   const [summary, items, match, elements] = await Promise.all([
     fetchJson({action:'qc_summary', ...params}),
@@ -824,13 +896,14 @@ async function loadNewsTypeOptionsForScope(){
   const {from, to} = currentRange();
   const service = currentService();
   const site = currentSite();
-  const data = await fetchJson({action:'news_types', from, to, service, site, time_period: currentTimePeriods()});
+  const data = await fetchJson({action:'news_types', from, to, service, site, time_period: currentTimePeriods(), ...advParams()});
   if (!data.ok) return;
   [qs('hourlyType'), qs('repType'), qs('pubType'), qs('subType'), qs('topType')].forEach(sel => { fillSelect(sel, data.items, 'همه انواع خبر'); });
 }
 
 async function refreshScope(){
   qs('reportArea').style.display = '';
+  await loadAdvFilterOptions();
   await loadNewsTypeOptionsForScope();
   await Promise.all([
     loadOverview(), loadHourly(), loadSubserviceOptions(), loadTopSubserviceOptions(),
@@ -898,7 +971,7 @@ function attachSelectSearch(selectId){
     }
   });
 }
-['hourlyType','subName','subType','topType','topSubservice','repName','repType','pubName','pubType','qcSubservice','qcReporter','qcNewsType']
+['hourlyType','subName','subType','topType','topSubservice','repName','repType','pubName','pubType','qcSubservice','qcReporter','qcNewsType','advReporter','advPublisher','advNewsType']
   .forEach(attachSelectSearch);
 
 document.addEventListener('DOMContentLoaded', function(){
