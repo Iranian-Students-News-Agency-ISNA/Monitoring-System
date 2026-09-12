@@ -9,26 +9,48 @@ $me = currentUser();
 $reporter = $me['display_name'];
 
 $activeDates = excelFilesActiveDates();
-$date = normalizeJalaliDate($_GET['date'] ?? '') ?? normalizeJalaliDate($activeDates[0] ?? '') ?? todayJalali();
-$hasExcelForDate = in_array($date, $activeDates, true);
+$defaultDate = normalizeJalaliDate($activeDates[0] ?? '') ?? todayJalali();
 
-$dateEntries = newsEntriesByDate($date);
+$from = normalizeJalaliDate($_GET['from'] ?? '') ?? $defaultDate;
+$to   = normalizeJalaliDate($_GET['to'] ?? '') ?? $defaultDate;
+if ($from > $to) { [$from, $to] = [$to, $from]; }
+
+$hasExcelForDate = false;
+foreach ($activeDates as $d) {
+    if ($d >= $from && $d <= $to) { $hasExcelForDate = true; break; }
+}
+
+$dateEntries = newsEntriesInRange($from, $to);
+
+$periodLabel = ($from === $to)
+    ? jalaliDateLabel($from)
+    : (jalaliDateLabel($from) . ' تا ' . jalaliDateLabel($to));
+$isSingleDay = ($from === $to);
 
 $newsCount = count($dateEntries);
 $monitorCounts = [];
+$monitorServiceCounts = []; // monitor => [service => count]
+$monitorServicesSet = [];   // مجموعه سرویس‌های دیده‌شده برای ستون‌های جدول
 foreach ($dateEntries as $r) {
     $enteredBy = trim((string)($r['entered_by_display'] ?? ''));
     if ($enteredBy === '') continue; // خبرهای قدیمی‌تر از این تغییر، این فیلد را ندارند
     $monitorCounts[$enteredBy] = ($monitorCounts[$enteredBy] ?? 0) + 1;
+
+    $svc = trim((string)($r['service_main'] ?? '')) ?: 'نامشخص';
+    $monitorServicesSet[$svc] = true;
+    if (!isset($monitorServiceCounts[$enteredBy])) $monitorServiceCounts[$enteredBy] = [];
+    $monitorServiceCounts[$enteredBy][$svc] = ($monitorServiceCounts[$enteredBy][$svc] ?? 0) + 1;
 }
+$monitorServiceList = array_keys($monitorServicesSet);
+sort($monitorServiceList, SORT_FLAG_CASE | SORT_STRING);
 arsort($monitorCounts);
 $topReporter = array_key_first($monitorCounts) ?? '';
 $topReporterCount = $monitorCounts[$topReporter] ?? 0;
 
 $recent = array_slice($dateEntries, 0, 5);
 
-// ---- اورویو آماری روز: بر اساس کل فایل اکسل آپلودشده (excel_rows)، مشابه بخش ارزیابی ----
-$fileRows = $hasExcelForDate ? rowsInRange($date, $date) : [];
+// ---- اورویو آماری: بر اساس کل فایل اکسل آپلودشده (excel_rows)، مشابه بخش ارزیابی ----
+$fileRows = $hasExcelForDate ? rowsInRange($from, $to) : [];
 $fileCount = count($fileRows);
 $totalViewsFile = array_sum(array_map(fn($r) => (int)($r['views'] ?? 0), $fileRows));
 $avgViewsAll = $fileCount > 0 ? round($totalViewsFile / $fileCount) : 0;
@@ -66,23 +88,25 @@ $trendsData = jsonRead('google_trends');
 $trendsList = $trendsData['trends'] ?? null;
 $trendsFetchedAt = $trendsData['fetched_at'] ?? null;
 
+[$defY, $defM, ] = array_map('intval', explode('/', todayJalali()));
+
 require __DIR__ . '/includes/layout_top.php';
 ?>
 <div class="card shadow-sm p-4 mb-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
     <div class="text-muted small">
-      آمار برای تاریخ: <strong class="text-dark"><?= htmlspecialchars(jalaliDateLabel($date)) ?></strong>
-      <span class="text-muted">(آخرین تاریخی که فایل اکسل آن آپلود شده)</span>
+      آمار برای <?= $isSingleDay ? 'تاریخ' : 'بازه' ?>: <strong class="text-dark"><?= htmlspecialchars($periodLabel) ?></strong>
     </div>
-    <form method="get" class="d-flex gap-2 align-items-center">
-      <select name="date" class="form-select form-select-sm" style="min-width:170px" onchange="this.form.submit()">
-        <?php if (!in_array($date, $activeDates, true)): ?>
-          <option value="<?= htmlspecialchars($date) ?>" selected><?= htmlspecialchars($date) ?> (بدون فایل اکسل)</option>
-        <?php endif; ?>
-        <?php foreach ($activeDates as $d): ?>
-          <option value="<?= htmlspecialchars($d) ?>" <?= $d === $date ? 'selected' : '' ?>><?= htmlspecialchars(jalaliDateLabel($d)) ?></option>
-        <?php endforeach; ?>
-      </select>
+    <form method="get" class="d-flex flex-wrap gap-2 align-items-end">
+      <div>
+        <label class="form-label small mb-1">از تاریخ</label>
+        <input type="text" name="from" class="form-control form-control-sm jalali-date-input" style="width:135px" data-default-year="<?= $defY ?>" data-default-month="<?= $defM ?>" value="<?= htmlspecialchars($from) ?>" required>
+      </div>
+      <div>
+        <label class="form-label small mb-1">تا تاریخ</label>
+        <input type="text" name="to" class="form-control form-control-sm jalali-date-input" style="width:135px" data-default-year="<?= $defY ?>" data-default-month="<?= $defM ?>" value="<?= htmlspecialchars($to) ?>" required>
+      </div>
+      <button class="btn btn-primary btn-sm">نمایش</button>
     </form>
   </div>
 </div>
@@ -109,7 +133,7 @@ require __DIR__ . '/includes/layout_top.php';
     <?php if ($hasExcelForDate): ?>
       <div class="card shadow-sm p-3 text-center h-100">
         <div class="fs-6 fw-bold text-success">فایل اکسل موجود است</div>
-        <div class="small text-muted">برای این تاریخ آپلود شده</div>
+        <div class="small text-muted"><?= $isSingleDay ? 'برای این تاریخ آپلود شده' : 'برای بخشی از این بازه آپلود شده' ?></div>
       </div>
     <?php else: ?>
       <a href="upload.php" class="card shadow-sm p-3 text-center h-100 text-decoration-none border-danger">
@@ -122,10 +146,10 @@ require __DIR__ . '/includes/layout_top.php';
 
 <div class="card shadow-sm p-4 mb-4">
   <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-    <h6 class="mb-0">آمار کلی روز  (<?= htmlspecialchars(jalaliDateLabel($date)) ?>) <span class="small text-muted fw-normal"> بر اساس کل اخبار ارسالی </span></h6>
+    <h6 class="mb-0">آمار کلی (<?= htmlspecialchars($periodLabel) ?>) <span class="small text-muted fw-normal"> بر اساس کل اخبار ارسالی </span></h6>
   </div>
   <?php if (!$hasExcelForDate): ?>
-    <div class="text-muted small">برای این تاریخ فایل اکسلی آپلود نشده؛ آماری برای نمایش وجود ندارد.</div>
+    <div class="text-muted small">برای این بازه فایل اکسلی آپلود نشده؛ آماری برای نمایش وجود ندارد.</div>
   <?php else: ?>
   <div class="row g-3 mb-3">
     <div class="col-6 col-md-3">
@@ -164,7 +188,7 @@ require __DIR__ . '/includes/layout_top.php';
     </div>
   </div>
   <?php if (empty($topServices)): ?>
-    <div class="text-muted small">داده‌ای برای این تاریخ ثبت نشده است.</div>
+    <div class="text-muted small">داده‌ای برای این بازه ثبت نشده است.</div>
   <?php else: ?>
     <div class="text-muted small mb-2">۶ سرویس با بیشترین تعداد خبر ارسالی</div>
     <div class="table-responsive">
@@ -194,16 +218,30 @@ require __DIR__ . '/includes/layout_top.php';
 </div>
 
 <div class="card shadow-sm p-4 mb-4">
-  <h6 class="mb-3">تعداد اخبار بررسی‌شده به تفکیک ناظر (<?= htmlspecialchars(jalaliDateLabel($date)) ?>)</h6>
+  <h6 class="mb-3">تعداد اخبار بررسی‌شده به تفکیک ناظر (<?= htmlspecialchars($periodLabel) ?>)</h6>
   <?php if (empty($monitorCounts)): ?>
-    <div class="text-muted small">داده‌ای برای این تاریخ ثبت نشده است.</div>
+    <div class="text-muted small">داده‌ای برای این بازه ثبت نشده است.</div>
   <?php else: ?>
     <div class="table-responsive">
       <table class="table table-sm table-hover align-middle sortable-table">
-        <thead><tr><th>ناظر</th><th>تعداد اخبار بررسی‌شده</th></tr></thead>
+        <thead>
+          <tr>
+            <th>ناظر</th>
+            <?php foreach ($monitorServiceList as $svcName): ?>
+              <th><?= htmlspecialchars($svcName) ?></th>
+            <?php endforeach; ?>
+            <th>جمع کل</th>
+          </tr>
+        </thead>
         <tbody>
           <?php foreach ($monitorCounts as $mon => $cnt): ?>
-            <tr><td><?= htmlspecialchars($mon) ?></td><td><?= (int)$cnt ?></td></tr>
+            <tr>
+              <td><?= htmlspecialchars($mon) ?></td>
+              <?php foreach ($monitorServiceList as $svcName): ?>
+                <td><?= (int)($monitorServiceCounts[$mon][$svcName] ?? 0) ?></td>
+              <?php endforeach; ?>
+              <td class="fw-bold"><?= (int)$cnt ?></td>
+            </tr>
           <?php endforeach; ?>
         </tbody>
       </table>
@@ -213,7 +251,7 @@ require __DIR__ . '/includes/layout_top.php';
 
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
-    <a href="entry.php?date=<?= urlencode($date) ?>" class="btn btn-primary w-100 py-3 fw-bold">ثبت خبر</a>
+    <a href="entry.php?date=<?= urlencode($to) ?>" class="btn btn-primary w-100 py-3 fw-bold">ثبت خبر</a>
   </div>
   <div class="col-6 col-md-3">
     <a href="file_entry.php" class="btn btn-outline-primary w-100 py-3 fw-bold">ثبت از پرونده</a>
@@ -227,9 +265,9 @@ require __DIR__ . '/includes/layout_top.php';
 </div>
 
 <div class="card shadow-sm p-4 mb-4">
-  <h6 class="mb-3">آخرین اخبار ثبت‌شده در این تاریخ</h6>
+  <h6 class="mb-3">آخرین اخبار ثبت‌شده در این <?= $isSingleDay ? 'تاریخ' : 'بازه' ?></h6>
   <?php if (empty($recent)): ?>
-    <div class="text-muted small">هنوز خبری برای این تاریخ ثبت نشده است.</div>
+    <div class="text-muted small">هنوز خبری برای این <?= $isSingleDay ? 'تاریخ' : 'بازه' ?> ثبت نشده است.</div>
   <?php else: ?>
   <div class="table-responsive">
     <table class="table table-sm table-hover align-middle">
