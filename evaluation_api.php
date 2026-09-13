@@ -174,16 +174,21 @@ switch ($action) {
             }
             if ($isnaCov === null) continue; // این ترند پوششی از ایسنا ندارد
 
-            // تطبیق تیتر خبر ایسنا (از فید گوگل‌ترندز) با تیترهای داخلی سیستم، بر اساس همپوشانی کلمات
-            $words = array_slice(preg_split('/\s+/u', trim($isnaCov['title'] ?? ''), -1, PREG_SPLIT_NO_EMPTY), 0, 6);
+            // تطبیق دقیق خبر ایسنا از طریق «تیتر عیناً یکسان» با ردیف‌های داخلی (بدون محدودیت به بازهٔ تاریخی گزارش،
+            // چون تاریخ واقعی خبر می‌تواند با تاریخ ترند یکی نباشد)
+            $normTitle = function (string $s): string {
+                $s = normalizePersianChars(trim($s));
+                $s = preg_replace('/\s+/u', ' ', $s);
+                return $s;
+            };
+            $targetTitle = $normTitle($isnaCov['title'] ?? '');
             $matched = null;
-            if (!empty($words)) {
-                $candidates = rowsInRange($from, $to, '', '', '', '', '', '', $words, 'or');
-                $bestScore = 0;
-                foreach ($candidates as $row) {
-                    $score = 0;
-                    foreach ($words as $w) { if (mb_stripos($row['title'] ?? '', $w) !== false) $score++; }
-                    if ($score > $bestScore) { $bestScore = $score; $matched = $row; }
+            if ($targetTitle !== '') {
+                $activeFileIds = excelActiveFileIds();
+                foreach (jsonRead('excel_rows') as $row) {
+                    if (!isset($activeFileIds[(int)($row['file_id'] ?? 0)])) continue;
+                    if (($row['site'] ?? '') !== 'ایسنا') continue;
+                    if ($normTitle((string)($row['title'] ?? '')) === $targetTitle) { $matched = $row; break; }
                 }
             }
 
