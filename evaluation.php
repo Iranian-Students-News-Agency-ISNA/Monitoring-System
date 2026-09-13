@@ -8,6 +8,9 @@ require __DIR__ . '/includes/layout_top.php';
 <link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&display=swap');
+.basic-filters-card, #reportArea{ font-family:'Vazirmatn', Tahoma, sans-serif; }
+
 .ts-wrapper .ts-control{min-height:calc(1.5em + .75rem + 2px);}
 
 .basic-filters-card{overflow:visible;}
@@ -15,7 +18,7 @@ require __DIR__ . '/includes/layout_top.php';
   display:flex; align-items:center; gap:10px;
   margin:-1.5rem -1.5rem 1.25rem -1.5rem;
   padding:14px 1.5rem;
-  background:linear-gradient(135deg, var(--navy-1), var(--navy-3));
+  background:linear-gradient(135deg, #16233d, #1e8a8a);
   color:#fff;
   border-top-left-radius:inherit; border-top-right-radius:inherit;
 }
@@ -26,6 +29,12 @@ require __DIR__ . '/includes/layout_top.php';
 }
 .basic-filters-card .bf-header h6{margin:0; font-weight:700;}
 .basic-filters-card .bf-header small{opacity:.8;}
+button.bf-header{
+  appearance:none;
+  -webkit-appearance:none;
+  width:calc(100% + 3rem) !important;
+  box-sizing:border-box;
+}
 .bf-group-label{
   font-size:.72rem; font-weight:700; color:#8a93a6;
   letter-spacing:.02em; margin-bottom:.6rem;
@@ -39,6 +48,22 @@ require __DIR__ . '/includes/layout_top.php';
   cursor:help; user-select:none; flex-shrink:0;
 }
 .info-icon:hover, .info-icon:focus{ background:var(--navy-2); color:#fff; outline:none; }
+
+#reportArea h6{
+  font-size:1.05rem;
+  font-weight:800;
+  color:#12314f;
+  letter-spacing:.01em;
+  position:relative;
+  padding-inline-start:14px;
+  margin-bottom:1rem;
+}
+#reportArea h6::before{
+  content:'';
+  position:absolute; inset-inline-start:0; top:2px; bottom:2px;
+  width:4px; border-radius:4px;
+  background:linear-gradient(180deg,#e8590c,#f2a900);
+}
 </style>
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <h5 class="mb-0">ارزیابی</h5>
@@ -415,7 +440,7 @@ require __DIR__ . '/includes/layout_top.php';
 const API = 'evaluation_api.php';
 let svcChart=null, hourlyChart=null, subChart=null, repChart=null, pubChart=null, typePieChart=null, reporterTypePieChart=null, reporterStackedChart=null;
 let qcCoverageChart=null, qcMatchChart=null, qcElementsChart=null;
-const PALETTE = ['#123a73','#1f5aa8','#e0a800','#c0392b','#16a085','#8e44ad','#d35400','#2c3e50','#27ae60','#7f8c8d','#e67e22','#2980b9','#c2185b'];
+const PALETTE = ['#2c3e50','#e67e22','#16a085','#c0392b','#8e44ad','#f1c40f','#2980b9','#27ae60','#d35400','#7f8c8d','#e84393','#00b894'];
 
 function qs(id){ return document.getElementById(id); }
 function currentRange(){ return { from: qs('fFrom').value.trim(), to: qs('fTo').value.trim(), granularity: qs('fGranularity').value }; }
