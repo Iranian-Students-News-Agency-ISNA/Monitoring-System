@@ -64,6 +64,22 @@ button.bf-header{
   width:4px; border-radius:4px;
   background:linear-gradient(180deg,#e8590c,#f2a900);
 }
+
+/* کلمات کلیدی پرتکرار تیترها */
+.wc-tabs{ display:flex; gap:6px; border-bottom:1px solid #e3e8f2; margin-bottom:14px; }
+.wc-tab-btn{ border:0; background:transparent; padding:8px 16px; font-weight:700; font-size:.88rem; color:#8a93a6; border-bottom:2px solid transparent; cursor:pointer; }
+.wc-tab-btn.active{ color:#12314f; border-bottom-color:#e8590c; }
+.wc-tab-pane{ display:none; }
+.wc-tab-pane.active{ display:block; }
+.wc-word-row{ cursor:pointer; }
+.wc-word-cell{ display:inline-block; padding:3px 10px; border-radius:6px; font-size:.9rem; }
+.wc-count-bar-wrap{ position:relative; background:#eef2fa; border-radius:5px; height:20px; overflow:hidden; }
+.wc-count-bar{ position:absolute; inset-inline-start:0; top:0; bottom:0; border-radius:5px; }
+.wc-count-bar-text{ position:relative; z-index:1; font-size:.78rem; font-weight:700; padding-inline-start:8px; line-height:20px; }
+.wc-legend{ display:flex; align-items:center; gap:8px; font-size:.75rem; color:#8a93a6; margin-top:8px; direction:ltr; justify-content:flex-end; }
+.wc-legend .wc-legend-bar{ height:8px; width:140px; border-radius:4px; background:linear-gradient(90deg, hsl(210,70%,55%), hsl(105,70%,45%), hsl(0,75%,50%)); }
+.wc-empty{ text-align:center; color:#8a93a6; padding:40px 0; font-size:.9rem; }
+.wc-word-badge{ display:inline-flex; align-items:center; gap:6px; background:#eef2fa; color:#12314f; border-radius:8px; padding:6px 12px; font-weight:700; }
 </style>
 <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
   <h5 class="mb-0">ارزیابی</h5>
@@ -244,6 +260,55 @@ button.bf-header{
       </div>
     </div>
     <canvas id="hourlyChart" height="90"></canvas>
+
+    <hr class="my-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+      <h6 class="mb-0">کلمات کلیدی پرتکرار تیترها</h6>
+      <div style="min-width:170px">
+        <select id="wcLimit" class="form-select form-select-sm">
+          <option value="40">۴۰ کلمه/عبارت پرتکرار</option>
+          <option value="60" selected>۶۰ کلمه/عبارت پرتکرار</option>
+          <option value="80">۸۰ کلمه/عبارت پرتکرار</option>
+          <option value="120">۱۲۰ کلمه/عبارت پرتکرار</option>
+        </select>
+      </div>
+    </div>
+    <p class="text-muted small mb-2">بر اساس تیتر خبرها (از یک تا چهار کلمه)، با اعمال فیلترهای پایه و پیشرفتهٔ بالای صفحه. روی هر کلمه/عبارت کلیک کنید تا اخبار مرتبط را در تب کناری ببینید.</p>
+
+    <div class="wc-tabs">
+      <button type="button" class="wc-tab-btn active" data-wc-tab="cloud">کلمات پرتکرار</button>
+      <button type="button" class="wc-tab-btn" data-wc-tab="news">اخبار مرتبط<span id="wcNewsTabBadge"></span></button>
+    </div>
+
+    <div class="wc-tab-pane active" id="wcTabCloud">
+      <div id="wcEmpty" class="wc-empty" style="display:none">داده‌ای برای نمایش نیست.</div>
+      <div id="wcTableWrap" class="table-responsive" style="max-height:560px; overflow-y:auto;">
+        <table class="table table-sm table-hover align-middle">
+          <thead><tr><th style="width:1%; white-space:nowrap">#</th><th style="width:1%; white-space:nowrap">کلمه/عبارت</th><th>تعداد تکرار</th></tr></thead>
+          <tbody id="wcWordsTable"></tbody>
+        </table>
+      </div>
+      <div class="wc-legend">
+        <span>کم‌تکرار</span><span class="wc-legend-bar"></span><span>پرتکرار</span>
+        <span class="ms-3">— عبارت‌های چندکلمه‌ای <b>پررنگ‌تر (bold)</b> نمایش داده می‌شوند؛ روی هر ردیف کلیک کنید تا اخبار مرتبط را ببینید</span>
+      </div>
+    </div>
+
+    <div class="wc-tab-pane" id="wcTabNews">
+      <div id="wcNewsEmpty" class="text-muted small">برای مشاهده اخبار، ابتدا یک کلمه/عبارت را از تب «کلمات پرتکرار» انتخاب کنید.</div>
+      <div id="wcNewsBody" style="display:none">
+        <div class="mb-2 d-flex align-items-center gap-2 flex-wrap">
+          <span class="wc-word-badge">🔎 <span id="wcSelectedWord"></span></span>
+          <span class="text-muted small"><span id="wcNewsCount"></span> خبر یافت شد</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle sortable-table">
+            <thead><tr><th>تیتر</th><th>تاریخ</th><th>خبرنگار</th><th>ناشر</th><th>زیرسرویس</th><th>نوع خبر</th><th>بازدید</th></tr></thead>
+            <tbody id="wcNewsTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- زیرسرویس -->
@@ -747,6 +812,103 @@ async function loadHourly(){
   hourlyChart = makeComboChart('hourlyChart', data.series, 'تعداد اخبار', 'میانگین بازدید');
 }
 
+// ===================== کلمات کلیدی پرتکرار تیترها (جدول) =====================
+
+let lastWcItems = [];
+let lastSelectedWcWord = '';
+
+function wcSwitchTab(name){
+  document.querySelectorAll('.wc-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.wcTab === name));
+  qs('wcTabCloud').classList.toggle('active', name === 'cloud');
+  qs('wcTabNews').classList.toggle('active', name === 'news');
+}
+document.querySelectorAll('.wc-tab-btn').forEach(b => b.addEventListener('click', () => wcSwitchTab(b.dataset.wcTab)));
+
+// طیف رنگ بر اساس فرکانس: آبی (کم‌تکرار) → سبز → قرمز (پرتکرار)
+function wcColorForRatio(ratio){
+  const hue = 210 - (ratio * 210); // 210 (آبی) تا 0 (قرمز)
+  const light = 46 - (ratio * 10);
+  return `hsl(${hue}, 72%, ${light}%)`;
+}
+
+function renderWcWordsTable(items){
+  const tbody = qs('wcWordsTable');
+  tbody.innerHTML = '';
+  if (!items.length){
+    qs('wcTableWrap').style.display = 'none';
+    qs('wcEmpty').style.display = '';
+    return;
+  }
+  qs('wcTableWrap').style.display = '';
+  qs('wcEmpty').style.display = 'none';
+
+  const counts = items.map(i => i.count);
+  const minCount = Math.min(...counts), maxCount = Math.max(...counts);
+  const span = Math.max(1, maxCount - minCount);
+
+  items.forEach((it, idx) => {
+    const ratio = (it.count - minCount) / span;
+    const color = wcColorForRatio(ratio);
+    const barWidthPct = Math.max(8, Math.round(ratio * 100));
+    const tr = document.createElement('tr');
+    tr.className = 'wc-word-row';
+    tr.innerHTML = `
+      <td class="text-muted" style="white-space:nowrap;">${idx + 1}</td>
+      <td style="white-space:nowrap;"><span class="wc-word-cell" style="background:${color}22; color:${color}; font-weight:${it.words > 1 ? '700' : '500'};">${it.text}</span></td>
+      <td>
+        <div class="wc-count-bar-wrap">
+          <div class="wc-count-bar" style="width:${barWidthPct}%; background:${color};"></div>
+          <span class="wc-count-bar-text">${it.count.toLocaleString()}</span>
+        </div>
+      </td>`;
+    tr.addEventListener('click', () => { loadWordcloudNews(it.text); wcSwitchTab('news'); });
+    tbody.appendChild(tr);
+  });
+}
+
+async function loadWordcloud(){
+  const {from, to} = currentRange();
+  const service = currentService();
+  const site = currentSite();
+  const keyword = currentKeywords();
+  const wcLimit = qs('wcLimit').value;
+  const data = await fetchJson({action:'wordcloud', from, to, service, site, keyword, keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), wc_limit: wcLimit, ...advParams()});
+  if (!data.ok) return;
+  lastWcItems = data.items;
+  renderWcWordsTable(data.items);
+  // اگر کلمه‌ای در تب اخبار انتخاب شده بود، با فیلترهای جدید به‌روزش کن
+  if (lastSelectedWcWord) loadWordcloudNews(lastSelectedWcWord);
+}
+
+function renderWcNewsTable(items){
+  const tbody = qs('wcNewsTable'); tbody.innerHTML = '';
+  if (!items.length){ tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">داده‌ای نیست</td></tr>'; return; }
+  items.forEach(it => {
+    const tr = document.createElement('tr');
+    const titleCell = it.link ? `<a href="${it.link}" target="_blank" rel="noopener">${it.title || '(بدون تیتر)'}</a>` : (it.title || '(بدون تیتر)');
+    tr.innerHTML = `<td>${titleCell}</td><td>${it.date||'-'}</td><td>${it.reporter||'-'}</td><td>${it.publisher||'-'}</td><td>${it.service_sub||'-'}</td><td>${it.news_type||'-'}</td><td>${(it.views||0).toLocaleString()}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function loadWordcloudNews(word){
+  const {from, to} = currentRange();
+  const service = currentService();
+  const site = currentSite();
+  const keyword = currentKeywords();
+  const data = await fetchJson({action:'wordcloud_news', from, to, service, site, keyword, keyword_mode: currentKeywordMode(), time_period: currentTimePeriods(), word, ...advParams()});
+  if (!data.ok) return;
+  lastSelectedWcWord = word;
+  qs('wcNewsEmpty').style.display = 'none';
+  qs('wcNewsBody').style.display = '';
+  qs('wcSelectedWord').textContent = word;
+  qs('wcNewsCount').textContent = data.count.toLocaleString();
+  qs('wcNewsTabBadge').textContent = ' (' + data.count.toLocaleString() + ')';
+  renderWcNewsTable(data.items);
+}
+
+qs('wcLimit').addEventListener('change', loadWordcloud);
+
 // ===================== زیرسرویس =====================
 
 async function loadSubserviceOptions(){
@@ -931,7 +1093,7 @@ async function refreshScope(){
   await loadAdvFilterOptions();
   await loadNewsTypeOptionsForScope();
   await Promise.all([
-    loadOverview(), loadHourly(), loadSubserviceOptions(), loadTopSubserviceOptions(),
+    loadOverview(), loadHourly(), loadWordcloud(), loadSubserviceOptions(), loadTopSubserviceOptions(),
     loadPersonOptions('reporter'), loadPersonOptions('publisher'), loadTopNews(), loadIsnaTrends(),
     loadQcOptions().then(loadQcSection),
   ]);
