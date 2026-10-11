@@ -47,10 +47,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $selected = array_filter(array_map('trim', (array)($_POST['topics'] ?? [])), fn($t) => $t !== '');
-    $known = array_column($topics, 'name');
-    foreach ($selected as $t) {
-        if (!in_array($t, $known, true)) topicAdd($t); // ثبت خودکار موضوعات تازه‌ساخته‌شده در لیست کلی
-    }
     topicEvalSet($date, $code, $selected, $myDisplayName);
     header('Location: topic_evaluation.php?' . http_build_query($backParams));
     exit;
@@ -58,7 +54,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $suggestedFromTitle = topicsSuggestForTitle((string)($excelRow['title'] ?? ''), $topics);
 $suggestedFromService = topicsSuggestForServiceSub((string)($excelRow['service_main'] ?? ''), (string)($excelRow['service_sub'] ?? ''));
-$suggested = array_values(array_unique(array_merge($suggestedFromTitle, $suggestedFromService)));
+$knownNames = array_column($topics, 'name');
+$suggestedFromService = array_values(array_intersect($suggestedFromService, $knownNames));
+$suggested = array_values(array_unique(array_merge($suggestedFromService, $suggestedFromTitle)));
+// موضوعاتی که قبلاً برای این خبر ثبت شده ولی بعدها از لیست حذف شده‌اند، همچنان قابل مشاهده بمانند
+$orphans = array_values(array_diff($existingTopics, $knownNames));
 $preselected = !empty($existingTopics) ? $existingTopics : $suggested;
 $notes = topicNotesGet($date, $code);
 $currentUsername = (string)(currentUser()['username'] ?? '');
@@ -109,9 +109,13 @@ require __DIR__ . '/includes/layout_top.php';
             <?= htmlspecialchars($t['name']) ?>
           </option>
         <?php endforeach; ?>
+        <?php foreach ($orphans as $o): ?>
+          <option value="<?= htmlspecialchars($o) ?>" selected><?= htmlspecialchars($o) ?></option>
+        <?php endforeach; ?>
       </select>
+      <div class="form-text"><a href="topics_manage.php" target="_blank">مدیریت موضوعات (افزودن / حذف)</a></div>
       <?php if (!empty($suggested)): ?>
-        <div class="form-text">پیشنهاد خودکار بر اساس تیتر: <?= htmlspecialchars(implode('، ', $suggested)) ?></div>
+        <div class="form-text">پیشنهاد خودکار بر اساس سرویس/زیرسرویس و تیتر: <?= htmlspecialchars(implode('، ', $suggested)) ?></div>
       <?php endif; ?>
     </div>
 
@@ -187,9 +191,7 @@ function toggleNoteEdit(id) {
 
 <script>
 new TomSelect('#topicSelect', {
-  create: true,
-  persist: false,
-  createOnBlur: true,
+  create: false,
   plugins: ['remove_button'],
   maxOptions: 1000,
   score: function(search){
