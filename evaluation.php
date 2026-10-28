@@ -261,54 +261,6 @@ button.bf-header{
     </div>
     <canvas id="hourlyChart" height="90"></canvas>
 
-    <hr class="my-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
-      <h6 class="mb-0">کلمات کلیدی پرتکرار تیترها</h6>
-      <div style="min-width:170px">
-        <select id="wcLimit" class="form-select form-select-sm">
-          <option value="40">۴۰ کلمه/عبارت پرتکرار</option>
-          <option value="60" selected>۶۰ کلمه/عبارت پرتکرار</option>
-          <option value="80">۸۰ کلمه/عبارت پرتکرار</option>
-          <option value="120">۱۲۰ کلمه/عبارت پرتکرار</option>
-        </select>
-      </div>
-    </div>
-    <p class="text-muted small mb-2">بر اساس تیتر خبرها (از یک تا چهار کلمه)، با اعمال فیلترهای پایه و پیشرفتهٔ بالای صفحه. روی هر کلمه/عبارت کلیک کنید تا اخبار مرتبط را در تب کناری ببینید.</p>
-
-    <div class="wc-tabs">
-      <button type="button" class="wc-tab-btn active" data-wc-tab="cloud">کلمات پرتکرار</button>
-      <button type="button" class="wc-tab-btn" data-wc-tab="news">اخبار مرتبط<span id="wcNewsTabBadge"></span></button>
-    </div>
-
-    <div class="wc-tab-pane active" id="wcTabCloud">
-      <div id="wcEmpty" class="wc-empty" style="display:none">داده‌ای برای نمایش نیست.</div>
-      <div id="wcTableWrap" class="table-responsive" style="max-height:560px; overflow-y:auto;">
-        <table class="table table-sm table-hover align-middle">
-          <thead><tr><th style="width:1%; white-space:nowrap">#</th><th style="width:1%; white-space:nowrap">کلمه/عبارت</th><th>تعداد تکرار</th></tr></thead>
-          <tbody id="wcWordsTable"></tbody>
-        </table>
-      </div>
-      <div class="wc-legend">
-        <span>کم‌تکرار</span><span class="wc-legend-bar"></span><span>پرتکرار</span>
-        <span class="ms-3">— عبارت‌های چندکلمه‌ای <b>پررنگ‌تر (bold)</b> نمایش داده می‌شوند؛ روی هر ردیف کلیک کنید تا اخبار مرتبط را ببینید</span>
-      </div>
-    </div>
-
-    <div class="wc-tab-pane" id="wcTabNews">
-      <div id="wcNewsEmpty" class="text-muted small">برای مشاهده اخبار، ابتدا یک کلمه/عبارت را از تب «کلمات پرتکرار» انتخاب کنید.</div>
-      <div id="wcNewsBody" style="display:none">
-        <div class="mb-2 d-flex align-items-center gap-2 flex-wrap">
-          <span class="wc-word-badge">🔎 <span id="wcSelectedWord"></span></span>
-          <span class="text-muted small"><span id="wcNewsCount"></span> خبر یافت شد</span>
-        </div>
-        <div class="table-responsive">
-          <table class="table table-sm table-hover align-middle sortable-table">
-            <thead><tr><th>تیتر</th><th>تاریخ</th><th>خبرنگار</th><th>ناشر</th><th>زیرسرویس</th><th>نوع خبر</th><th>بازدید</th></tr></thead>
-            <tbody id="wcNewsTable"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- زیرسرویس -->
@@ -449,6 +401,57 @@ button.bf-header{
           <thead><tr><th>نوع خبر</th><th>تعداد</th><th>درصد</th></tr></thead>
           <tbody id="pubTypeTable"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- کلمات کلیدی پرتکرار (زیر گزارش ناشران) -->
+  <div class="card shadow-sm p-4 mb-4">
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+      <h6 class="mb-0">کلمات کلیدی پرتکرار تیترها</h6>
+      <div style="min-width:170px">
+        <select id="wcLimit" class="form-select form-select-sm">
+          <option value="40">۴۰ کلمه/عبارت پرتکرار</option>
+          <option value="60" selected>۶۰ کلمه/عبارت پرتکرار</option>
+          <option value="80">۸۰ کلمه/عبارت پرتکرار</option>
+          <option value="120">۱۲۰ کلمه/عبارت پرتکرار</option>
+        </select>
+      </div>
+    </div>
+    <p class="text-muted small mb-2">بر اساس تیتر خبرها (از یک تا چهار کلمه)، با اعمال فیلترهای پایه و پیشرفتهٔ بالای صفحه. روی هر کلمه/عبارت کلیک کنید تا اخبار مرتبط را در تب کناری ببینید.</p>
+
+    <div class="wc-tabs">
+      <button type="button" class="wc-tab-btn active" data-wc-tab="cloud">کلمات پرتکرار</button>
+      <button type="button" class="wc-tab-btn" data-wc-tab="news">اخبار مرتبط<span id="wcNewsTabBadge"></span></button>
+    </div>
+
+    <div class="wc-tab-pane active" id="wcTabCloud">
+      <div id="wcEmpty" class="wc-empty" style="display:none">داده‌ای برای نمایش نیست.</div>
+      <div id="wcTableWrap" class="table-responsive" style="max-height:560px; overflow-y:auto;">
+        <table class="table table-sm table-hover align-middle">
+          <thead><tr><th style="width:1%; white-space:nowrap">#</th><th style="width:1%; white-space:nowrap">کلمه/عبارت</th><th>تعداد تکرار</th></tr></thead>
+          <tbody id="wcWordsTable"></tbody>
+        </table>
+      </div>
+      <div class="wc-legend">
+        <span>کم‌تکرار</span><span class="wc-legend-bar"></span><span>پرتکرار</span>
+        <span class="ms-3">— عبارت‌های چندکلمه‌ای <b>پررنگ‌تر (bold)</b> نمایش داده می‌شوند؛ روی هر ردیف کلیک کنید تا اخبار مرتبط را ببینید</span>
+      </div>
+    </div>
+
+    <div class="wc-tab-pane" id="wcTabNews">
+      <div id="wcNewsEmpty" class="text-muted small">برای مشاهده اخبار، ابتدا یک کلمه/عبارت را از تب «کلمات پرتکرار» انتخاب کنید.</div>
+      <div id="wcNewsBody" style="display:none">
+        <div class="mb-2 d-flex align-items-center gap-2 flex-wrap">
+          <span class="wc-word-badge">🔎 <span id="wcSelectedWord"></span></span>
+          <span class="text-muted small"><span id="wcNewsCount"></span> خبر یافت شد</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover align-middle sortable-table">
+            <thead><tr><th>تیتر</th><th>تاریخ</th><th>خبرنگار</th><th>ناشر</th><th>زیرسرویس</th><th>نوع خبر</th><th>بازدید</th></tr></thead>
+            <tbody id="wcNewsTable"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </div>
