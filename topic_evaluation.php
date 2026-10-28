@@ -25,7 +25,10 @@ require __DIR__ . '/includes/layout_top.php';
 <div class="card shadow-sm p-4 mb-3">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0">ارزیابی موضوعی اخبار</h5>
-    <a href="topics_manage.php" class="btn btn-outline-secondary btn-sm">مدیریت موضوعات</a>
+    <div class="d-flex gap-2">
+      <a href="topic_report.php" class="btn btn-success btn-sm">گزارش پربازدیدترین موضوعات</a>
+      <a href="topics_manage.php" class="btn btn-outline-secondary btn-sm">مدیریت موضوعات</a>
+    </div>
   </div>
   <form method="get" class="row g-3 align-items-end">
     <div class="col-md-3">
