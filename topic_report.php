@@ -30,7 +30,7 @@ $allTopics = $agg;
 $agg = array_slice($agg, 0, 20, true);
 
 // خروجی اکسل جدول موضوعات
-if (isset($_GET['export'])) {
+if (($_GET['export'] ?? '') === '1') {
     $headers = ['ردیف', 'موضوع', 'تعداد خبر', 'مجموع بازدید', 'میانگین بازدید'];
     $dataRows = [];
     $i = 0;
@@ -84,6 +84,49 @@ foreach (topicEvaluationRows($from, $to, '', []) as $r) {
 }
 $typeCols = array_keys($typeSet); sort($typeCols, SORT_STRING);
 $svcCols = array_keys($svcSet); sort($svcCols, SORT_STRING);
+// خروجی اکسل ماتریس‌ها: ?export=mx_svc_count | mx_svc_views | mx_type_count
+$mxExports = [
+    'mx_svc_count'  => [&$mx, &$svcCols,  'count', 'موضوع × سرویس (تعداد خبر)'],
+    'mx_svc_views'  => [&$mx, &$svcCols,  'views', 'موضوع × سرویس (بازدید)'],
+    'mx_type_count' => [&$mt, &$typeCols, 'count', 'موضوع × نوع خبر (تعداد خبر)'],
+];
+if (isset($_GET['export']) && isset($mxExports[$_GET['export']])) {
+    [$M, $C, $metric, $title] = $mxExports[$_GET['export']];
+    $tot = [];
+    foreach ($M as $t => $cells) $tot[$t] = array_sum(array_column($cells, $metric));
+    arsort($tot);
+    $dataRows = [];
+    foreach (array_slice(array_keys($tot), 0, 20) as $t) {
+        $vals = [];
+        foreach ($C as $c) $vals[] = (int)($M[$t][$c][$metric] ?? 0);
+        $dataRows[] = [$t, $vals];
+    }
+    $cfg = appConfig();
+    if (!is_dir($cfg['storage_tmp'])) mkdir($cfg['storage_tmp'], 0775, true);
+    $tmpFile = $cfg['storage_tmp'] . '/topic_mx_' . uniqid() . '.xlsx';
+    try {
+        xlsxWriteMatrix($tmpFile, mb_substr(str_replace(['×','(',')'], ['-','',''], $title), 0, 31), $C, $dataRows);
+    } catch (Throwable $e) {
+        die('خطا در ساخت فایل خروجی: ' . htmlspecialchars($e->getMessage()));
+    }
+    $filename = 'ماتریس_' . str_replace(['/', ' ', '×', '(', ')'], ['-', '_', 'x', '', ''], $title) . '_' . str_replace('/', '-', $from) . '_' . str_replace('/', '-', $to) . '.xlsx';
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $filename . '"');
+    header('Content-Length: ' . filesize($tmpFile));
+    header('Cache-Control: max-age=0');
+    readfile($tmpFile);
+    unlink($tmpFile);
+    exit;
+}
+function mxXlsxBtn(string $key, string $from, string $to, string $service): void
+{
+    $q = htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'export' => $key]));
+    echo '<a class="btn btn-sm btn-outline-success py-0 px-2" title="خروجی اکسل ماتریس" href="topic_report.php?' . $q . '">اکسل</a>';
+}
+function pngBtn(string $canvasId, string $name): void
+{
+    echo '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" data-png="' . htmlspecialchars($canvasId) . '" data-name="' . htmlspecialchars($name) . '" title="دانلود نمودار به‌صورت تصویر">تصویر PNG</button>';
+}
 function matrixRender(array $mx, array $cols, string $metric, int $limit = 20): void
 {
     $tot = [];
@@ -308,6 +351,7 @@ require __DIR__ . '/includes/layout_top.php';
   <?php if ($n === 0): ?>
     <div class="text-muted text-center py-4">در این بازه موضوعی ثبت نشده است.</div>
   <?php else: ?>
+    <div class="text-end mb-1"><?php pngBtn('topicChart', 'نمودار_پربازدیدترین_موضوعات'); ?></div>
     <div style="position:relative; height:<?= max(260, $n * 34 + 60) ?>px"><canvas id="topicChart"></canvas></div>
     <?php if ($untagged > 0): ?>
       <p class="text-muted small mt-3 mb-0"><?= number_format($untagged) ?> خبر در این بازه هنوز موضوعی ثبت نشده و در نمودار لحاظ نشده است.</p>
@@ -340,20 +384,20 @@ require __DIR__ . '/includes/layout_top.php';
     <?php narrBox(narrTable($allTopics)); ?>
 
     <?php if ($svcCols): ?>
-      <h6 class="mt-4 mb-1">ماتریس موضوع × سرویس: تعداد خبر</h6>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × سرویس: تعداد خبر</h6><?php mxXlsxBtn('mx_svc_count', $from, $to, $service); ?></div>
       <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (۲۰ موضوع پرخبر؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس).</p>
       <?php matrixRender($mx, $svcCols, 'count'); narrBox(narrMxCount($mx, $svcCols)); ?>
 
-      <h6 class="mt-4 mb-1">ماتریس موضوع × سرویس: مجموع بازدید</h6>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × سرویس: مجموع بازدید</h6><?php mxXlsxBtn('mx_svc_views', $from, $to, $service); ?></div>
       <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، مجموع بازدید بیشتر (۲۰ موضوع پربازدید؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس).</p>
       <?php matrixRender($mx, $svcCols, 'views'); narrBox(narrMxViews($mx, $svcCols)); ?>
 
-      <h6 class="mt-4 mb-1">نمودار حبابی موضوع × سرویس</h6>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">نمودار حبابی موضوع × سرویس</h6><?php pngBtn('bubbleChart', 'نمودار_حبابی_موضوع_سرویس'); ?></div>
       <p class="text-muted small mb-2">اندازهٔ حباب = تعداد خبر، رنگ سبز (پررنگ = بازدید بیشتر) = مجموع بازدید (۲۰ موضوع پربازدید).</p>
       <div style="position:relative; height:<?= max(300, count($bTopics) * 34 + 120) ?>px"><canvas id="bubbleChart"></canvas></div>
       <?php narrBox(narrBubble($bPoints, $bTopics, $svcCols, (int)$bMaxC, (int)$bMaxV)); ?>
 
-      <h6 class="mt-4 mb-1">ماتریس موضوع × نوع خبر: تعداد خبر</h6>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × نوع خبر: تعداد خبر</h6><?php mxXlsxBtn('mx_type_count', $from, $to, $service); ?></div>
       <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (۲۰ موضوع پرخبر؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس). با نگه داشتن ماوس روی هر خانه، مجموع بازدید هم دیده می‌شود.</p>
       <?php matrixRender($mt, $typeCols, 'count'); narrBox(narrMxType($mt, $typeCols)); ?>
     <?php endif; ?>
@@ -363,6 +407,15 @@ require __DIR__ . '/includes/layout_top.php';
 <?php require __DIR__ . '/includes/layout_bottom.php'; ?>
 <script>
 document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) { new bootstrap.Tooltip(el); });
+document.querySelectorAll('[data-png]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    var src = document.getElementById(b.dataset.png); if (!src) return;
+    var c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+    var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(src, 0, 0);
+    var a = document.createElement('a'); a.href = c.toDataURL('image/png');
+    a.download = b.dataset.name + '_<?= str_replace('/', '-', $from) ?>_<?= str_replace('/', '-', $to) ?>.png'; a.click();
+  });
+});
 <?php if ($n > 0 && $bPoints): ?>
 (function () {
   var topics = <?= json_encode($bTopics, JSON_UNESCAPED_UNICODE) ?>;
