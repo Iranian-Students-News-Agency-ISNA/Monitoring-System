@@ -10,12 +10,16 @@ $today   = todayJalali();
 $from    = normalizeJalaliDate($_GET['from'] ?? '') ?? $today;
 $to      = normalizeJalaliDate($_GET['to'] ?? '') ?? $today;
 $service = trim($_GET['service'] ?? '');
+$selectedRanges = array_values(array_intersect(
+    (array)($_GET['ranges'] ?? []),
+    array_column(viewsBuckets(), 'key')
+));
 $services = excelRowsDistinctServicesInRange($from, $to);
 
 // تجمیع: مجموع بازدید و تعداد خبر برای هر موضوع (اخبار ایسنا با حداقل ۱۰۰۰ بازدید)
 $agg = [];
 $untagged = 0;
-foreach (topicEvaluationRows($from, $to, $service, []) as $r) {
+foreach (topicEvaluationRows($from, $to, $service, $selectedRanges) as $r) {
     if (empty($r['__topics'])) { $untagged++; continue; }
     foreach ($r['__topics'] as $t) {
         $t = ltrim(trim((string)$t), '*');
@@ -69,7 +73,7 @@ foreach ($labels as $i => $_) {
 
 // ماتریس موضوع × سرویس (مستقل از فیلتر سرویس بالا تا همهٔ سرویس‌ها دیده شوند)
 $mx = []; $svcSet = []; $mt = []; $typeSet = [];
-foreach (topicEvaluationRows($from, $to, '', []) as $r) {
+foreach (topicEvaluationRows($from, $to, '', $selectedRanges) as $r) {
     $sv = trim((string)($r['service_main'] ?? '')); if ($sv === '') $sv = 'نامشخص';
     foreach (($r['__topics'] ?? []) as $t) {
         $t = ltrim(trim((string)$t), '*'); if ($t === '') continue;
@@ -118,9 +122,9 @@ if (isset($_GET['export']) && isset($mxExports[$_GET['export']])) {
     unlink($tmpFile);
     exit;
 }
-function mxXlsxBtn(string $key, string $from, string $to, string $service): void
+function mxXlsxBtn(string $key, string $from, string $to, string $service, array $ranges = []): void
 {
-    $q = htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'export' => $key]));
+    $q = htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'ranges' => $ranges, 'export' => $key]));
     echo '<a class="btn btn-sm btn-outline-success py-0 px-2" title="خروجی اکسل ماتریس" href="topic_report.php?' . $q . '">اکسل</a>';
 }
 function pngBtn(string $canvasId, string $name): void
@@ -316,7 +320,7 @@ require __DIR__ . '/includes/layout_top.php';
 <div class="card shadow-sm p-4 mb-3">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0">گزارش پربازدیدترین موضوعات</h5>
-    <a href="topic_evaluation.php" class="btn btn-outline-secondary btn-sm">بازگشت به ارزیابی موضوعی</a>
+    <a href="topic_evaluation.php?<?= htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'ranges' => $selectedRanges, 'filtered' => 1])) ?>" class="btn btn-outline-secondary btn-sm">بازگشت به ارزیابی موضوعی</a>
   </div>
   <form method="get" class="row g-3 align-items-end">
     <div class="col-md-3">
@@ -336,6 +340,16 @@ require __DIR__ . '/includes/layout_top.php';
       <label class="form-label">تا تاریخ</label>
       <input type="text" class="form-control jalali-date-input" name="to" value="<?= htmlspecialchars($to) ?>">
     </div>
+    <div class="col-12">
+      <label class="form-label d-block">محدوده بازدید <span class="text-muted small">(بدون انتخاب = همه محدوده‌ها؛ روی کل گزارش اعمال می‌شود)</span></label>
+      <?php foreach (viewsBuckets() as $b): ?>
+        <div class="form-check form-check-inline">
+          <input class="form-check-input" type="checkbox" name="ranges[]" id="rb_<?= $b['key'] ?>"
+                 value="<?= $b['key'] ?>" <?= in_array($b['key'], $selectedRanges, true) ? 'checked' : '' ?>>
+          <label class="form-check-label" for="rb_<?= $b['key'] ?>"><?= htmlspecialchars($b['label']) ?></label>
+        </div>
+      <?php endforeach; ?>
+    </div>
     <div class="col-md-3">
       <button class="btn btn-primary w-100">نمایش گزارش</button>
     </div>
@@ -346,7 +360,7 @@ require __DIR__ . '/includes/layout_top.php';
   <h6 class="mb-3">
     موضوعات پربازدید
     <span class="text-muted ms-1" style="cursor:help" data-bs-toggle="tooltip" data-bs-placement="bottom"
-          title="مجموع بازدید خبرهای ثبت‌شده برای هر موضوع در بازه و سرویس انتخابی (اخبار بالای ۱۰۰۰ بازدید)؛ خبر چندموضوعی برای هر موضوع جداگانه حساب می‌شود.">ⓘ</span>
+          title="مجموع بازدید خبرهای ثبت‌شده برای هر موضوع در بازه و سرویس انتخابی (اخبار بالای ۱۰۰۰ بازدید، در محدوده‌های بازدید انتخابی)؛ خبر چندموضوعی برای هر موضوع جداگانه حساب می‌شود.">ⓘ</span>
   </h6>
   <?php if ($n === 0): ?>
     <div class="text-muted text-center py-4">در این بازه موضوعی ثبت نشده است.</div>
@@ -361,7 +375,7 @@ require __DIR__ . '/includes/layout_top.php';
     <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
       <h6 class="mb-0">جدول موضوعات</h6>
       <a class="btn btn-sm btn-outline-success d-inline-flex align-items-center p-1" title="خروجی اکسل"
-         href="topic_report.php?<?= htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'export' => 1])) ?>">
+         href="topic_report.php?<?= htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'ranges' => $selectedRanges, 'export' => 1])) ?>">
         <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="2" width="18" height="20" rx="2.5" fill="#1d6f42"/><path d="M8 7.5l8 9M16 7.5l-8 9" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
       </a>
     </div>
@@ -384,11 +398,11 @@ require __DIR__ . '/includes/layout_top.php';
     <?php narrBox(narrTable($allTopics)); ?>
 
     <?php if ($svcCols): ?>
-      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × سرویس: تعداد خبر</h6><?php mxXlsxBtn('mx_svc_count', $from, $to, $service); ?></div>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × سرویس: تعداد خبر</h6><?php mxXlsxBtn('mx_svc_count', $from, $to, $service, $selectedRanges); ?></div>
       <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (۲۰ موضوع پرخبر؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس).</p>
       <?php matrixRender($mx, $svcCols, 'count'); narrBox(narrMxCount($mx, $svcCols)); ?>
 
-      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × سرویس: مجموع بازدید</h6><?php mxXlsxBtn('mx_svc_views', $from, $to, $service); ?></div>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × سرویس: مجموع بازدید</h6><?php mxXlsxBtn('mx_svc_views', $from, $to, $service, $selectedRanges); ?></div>
       <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، مجموع بازدید بیشتر (۲۰ موضوع پربازدید؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس).</p>
       <?php matrixRender($mx, $svcCols, 'views'); narrBox(narrMxViews($mx, $svcCols)); ?>
 
@@ -397,7 +411,7 @@ require __DIR__ . '/includes/layout_top.php';
       <div style="position:relative; height:<?= max(300, count($bTopics) * 34 + 120) ?>px"><canvas id="bubbleChart"></canvas></div>
       <?php narrBox(narrBubble($bPoints, $bTopics, $svcCols, (int)$bMaxC, (int)$bMaxV)); ?>
 
-      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × نوع خبر: تعداد خبر</h6><?php mxXlsxBtn('mx_type_count', $from, $to, $service); ?></div>
+      <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × نوع خبر: تعداد خبر</h6><?php mxXlsxBtn('mx_type_count', $from, $to, $service, $selectedRanges); ?></div>
       <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (۲۰ موضوع پرخبر؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس). با نگه داشتن ماوس روی هر خانه، مجموع بازدید هم دیده می‌شود.</p>
       <?php matrixRender($mt, $typeCols, 'count'); narrBox(narrMxType($mt, $typeCols)); ?>
     <?php endif; ?>
