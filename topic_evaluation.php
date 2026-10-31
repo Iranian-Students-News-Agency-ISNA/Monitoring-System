@@ -26,7 +26,7 @@ require __DIR__ . '/includes/layout_top.php';
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0">ارزیابی موضوعی اخبار</h5>
     <div class="d-flex gap-2">
-      <a href="topic_report.php" class="btn btn-success btn-sm">گزارش پربازدیدترین موضوعات</a>
+      <a href="topic_report.php?<?= htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'ranges' => $selectedRanges])) ?>" class="btn btn-success btn-sm">گزارش پربازدیدترین موضوعات</a>
       <a href="topics_manage.php" class="btn btn-outline-secondary btn-sm">مدیریت موضوعات</a>
     </div>
   </div>
