@@ -42,6 +42,8 @@ if (($_GET['export'] ?? '') === '1') {
         $i++;
         $dataRows[] = [$i, $name, (int)$a['count'], (int)$a['views'], (int)round($a['views'] / max(1, $a['count']))];
     }
+    $sumC = array_sum(array_column($allTopics, 'count')); $sumV = array_sum(array_column($allTopics, 'views'));
+    $dataRows[] = ['', 'جمع', (int)$sumC, (int)$sumV, (int)round($sumV / max(1, $sumC))];
     $cfg = appConfig();
     if (!is_dir($cfg['storage_tmp'])) mkdir($cfg['storage_tmp'], 0775, true);
     $tmpFile = $cfg['storage_tmp'] . '/topic_report_' . uniqid() . '.xlsx';
@@ -141,20 +143,25 @@ function matrixRender(array $mx, array $cols, string $metric, int $limit = 20): 
     foreach ($topics as $t) foreach ($cols as $c) $max = max($max, $mx[$t][$c][$metric] ?? 0);
     echo '<div class="table-responsive"><table class="table table-sm table-bordered text-center align-middle mb-0" style="font-size:.85rem"><thead><tr><th class="text-start">موضوع</th>';
     foreach ($cols as $c) echo '<th>' . htmlspecialchars($c) . '</th>';
-    echo '</tr></thead><tbody>';
+    echo '<th class="table-light">جمع</th></tr></thead><tbody>';
+    $colTot = array_fill_keys($cols, 0);
     foreach ($topics as $t) {
         echo '<tr><th class="text-start fw-normal text-nowrap">' . htmlspecialchars($t) . '</th>';
+        $rowTot = 0;
         foreach ($cols as $c) {
             $v = $mx[$t][$c][$metric] ?? 0;
+            $rowTot += $v; $colTot[$c] += $v;
             if ($v <= 0 || $max <= 0) { echo '<td class="text-muted">–</td>'; continue; }
             $f = $v / $max;
             $l = 94 - (int)round($f * 62);
             $tip = 'تعداد خبر: ' . number_format($mx[$t][$c]['count'] ?? 0) . ' | مجموع بازدید: ' . number_format($mx[$t][$c]['views'] ?? 0);
             echo '<td title="' . htmlspecialchars($tip) . '" style="background:hsl(142,60%,' . $l . '%);color:' . ($l < 55 ? '#fff' : '#12351f') . '">' . number_format($v) . '</td>';
         }
-        echo '</tr>';
+        echo '<td class="fw-bold table-light">' . number_format($rowTot) . '</td></tr>';
     }
-    echo '</tbody></table></div>';
+    echo '</tbody><tfoot class="table-light fw-bold"><tr><th class="text-start">جمع</th>';
+    foreach ($cols as $c) echo '<td>' . number_format($colTot[$c]) . '</td>';
+    echo '<td>' . number_format(array_sum($colTot)) . '</td></tr></tfoot></table></div>';
 }
 
 // داده‌های نمودار حبابی موضوع × سرویس (۲۰ موضوع پربازدید)
@@ -393,6 +400,10 @@ require __DIR__ . '/includes/layout_top.php';
             </tr>
           <?php endforeach; ?>
         </tbody>
+        <?php $sumC = array_sum(array_column($allTopics, 'count')); $sumV = array_sum(array_column($allTopics, 'views')); ?>
+        <tfoot class="table-light fw-bold">
+          <tr><td></td><td>جمع</td><td><?= number_format($sumC) ?></td><td><?= number_format($sumV) ?></td><td><?= number_format((int)round($sumV / max(1, $sumC))) ?></td></tr>
+        </tfoot>
       </table>
     </div>
     <?php narrBox(narrTable($allTopics)); ?>

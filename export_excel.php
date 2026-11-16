@@ -14,12 +14,12 @@ if ($reporter === '' || $from === '' || $to === '') { die('پارامترها ن
 
 $rows = newsEntriesFilter($reporter, $from, $to, $service);
 
-$headers = ['تعداد','ناشر','آدرس','تیتر','سرویس','زیرسرویس','سوژه','نوع خبر','نوع واقعی خبر','مصاحبه‌شونده',
+$headers = ['تعداد','تاریخ','ناشر','آدرس','تیتر','سرویس','زیرسرویس','سوژه','نوع خبر','نوع واقعی خبر','مصاحبه‌شونده',
             'عناصر خبری','منبع','توضیحات','لینک','تعداد اخبار مرتبط','توضیح اخبار مرتبط','برچسب','توضیح برچسب','تعداد افزونه','توضیح افزونه'];
 $dataRows = [];
 foreach ($rows as $i => $row) {
     $dataRows[] = [
-        $i + 1, $row['publisher'], $row['news_link'], $row['title'],
+        $i + 1, $row['entry_date'] ?? '', $row['publisher'], $row['news_link'], $row['title'],
         $row['service_main'] ?? '', $row['service_sub'] ?? '', $row['subject'],
         $row['news_type'], $row['real_news_type'], $row['interviewee'] ?? '',
         $row['news_elements'], $row['source'] ?? '', $row['description'] ?? '', $row['news_link'],
