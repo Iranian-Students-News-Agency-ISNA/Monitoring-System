@@ -223,6 +223,8 @@ function xlsxWriteMatrix(string $path, string $sheetName, array $cols, array $ro
     ];
     $topicXf = 4;
     $xfs[] = '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center" readingOrder="2"/></xf>';
+    $totXf = 5; // جمع: پررنگ، بدون رنگ‌بندی
+    $xfs[] = '<xf numFmtId="3" fontId="1" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>';
     $lvl = [];
     $styleFor = function (int $l) use (&$lvl, &$fills, &$xfs, $hsl): int {
         if (isset($lvl[$l])) return $lvl[$l];
@@ -235,7 +237,8 @@ function xlsxWriteMatrix(string $path, string $sheetName, array $cols, array $ro
     foreach ($cols as $ci => $c) {
         $sd .= '<c r="' . xlsxColRefFromIndex($ci + 1) . '1" s="1" t="inlineStr"><is><t xml:space="preserve">' . xlsxEscape((string)$c) . '</t></is></c>';
     }
-    $sd .= '</row>';
+    $sd .= '<c r="' . xlsxColRefFromIndex(count($cols) + 1) . '1" s="1" t="inlineStr"><is><t>جمع</t></is></c></row>';
+    $colTot = array_fill(0, count($cols), 0);
     foreach ($rows as $ri => $r) {
         $n = $ri + 2;
         $sd .= '<row r="' . $n . '" ht="21" customHeight="1"><c r="A' . $n . '" s="' . $topicXf . '" t="inlineStr"><is><t xml:space="preserve">' . xlsxEscape((string)$r[0]) . '</t></is></c>';
@@ -248,9 +251,14 @@ function xlsxWriteMatrix(string $path, string $sheetName, array $cols, array $ro
                 $l = 94 - (int)round(($v / $max) * 62);
                 $sd .= '<c r="' . $ref . '" s="' . $styleFor($l) . '"><v>' . $v . '</v></c>';
             }
+            $colTot[$ci] = ($colTot[$ci] ?? 0) + $v;
         }
-        $sd .= '</row>';
+        $sd .= '<c r="' . xlsxColRefFromIndex(count($cols) + 1) . $n . '" s="' . $totXf . '"><v>' . array_sum(array_map('intval', $r[1])) . '</v></c></row>';
     }
+    $n = count($rows) + 2;
+    $sd .= '<row r="' . $n . '" ht="21" customHeight="1"><c r="A' . $n . '" s="2" t="inlineStr"><is><t>جمع</t></is></c>';
+    foreach ($colTot as $ci => $v) $sd .= '<c r="' . xlsxColRefFromIndex($ci + 1) . $n . '" s="' . $totXf . '"><v>' . $v . '</v></c>';
+    $sd .= '<c r="' . xlsxColRefFromIndex(count($cols) + 1) . $n . '" s="' . $totXf . '"><v>' . array_sum($colTot) . '</v></c></row>';
 
     $zip->addFromString('[Content_Types].xml',
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' .
@@ -281,7 +289,7 @@ function xlsxWriteMatrix(string $path, string $sheetName, array $cols, array $ro
         '<border><left style="thin"><color rgb="FFDEE2E6"/></left><right style="thin"><color rgb="FFDEE2E6"/></right><top style="thin"><color rgb="FFDEE2E6"/></top><bottom style="thin"><color rgb="FFDEE2E6"/></bottom><diagonal/></border></borders>' .
         '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' .
         '<cellXfs count="' . count($xfs) . '">' . implode('', $xfs) . '</cellXfs></styleSheet>');
-    $colsXml = '<col min="1" max="1" width="34" customWidth="1"/><col min="2" max="' . (count($cols) + 1) . '" width="16" customWidth="1"/>';
+    $colsXml = '<col min="1" max="1" width="34" customWidth="1"/><col min="2" max="' . (count($cols) + 2) . '" width="16" customWidth="1"/>';
     $zip->addFromString('xl/worksheets/sheet1.xml',
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
         '<sheetViews><sheetView rightToLeft="1" showGridLines="0" workbookViewId="0"><pane xSplit="1" ySplit="1" topLeftCell="B2" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>' .
