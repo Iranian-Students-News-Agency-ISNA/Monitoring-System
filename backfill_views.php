@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $updated = 0;
-    jsonUpdate('excel_rows', function ($rows) use ($viewsMap, &$updated) {
+    excelRowsMutate( function ($rows) use ($viewsMap, &$updated) {
         foreach ($rows as &$r) {
             $fid = (int)($r['file_id'] ?? 0);
             $code = trim((string)($r['code'] ?? ''));
