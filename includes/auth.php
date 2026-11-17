@@ -145,6 +145,11 @@ function requireLoginPage(): void
 {
     authStartSession();
     if (!currentUser()) {
+        // کسی که قبلاً از سامانه ارزیابی ماهانه وارد شده، پس از انقضای نشست دوباره خودکار وارد می‌شود
+        if (!empty($_COOKIE['nz_sso']) && empty($_GET['nosso'])) {
+            header('Location: ../arzyabi/go_daily.php');
+            exit;
+        }
         $next = urlencode($_SERVER['REQUEST_URI'] ?? 'entry.php');
         header('Location: login.php?next=' . $next);
         exit;
@@ -152,7 +157,8 @@ function requireLoginPage(): void
 }
 
 // برای نقاط پایانی AJAX/JSON: در صورت عدم ورود، خروجی JSON با کد ۴۰۱
-function requireLoginApi(): void
+// $releaseSession=true: بعد از بررسی ورود، قفل نشست آزاد می‌شود تا چند درخواست AJAX همزمان پشت سر هم صف نبندند
+function requireLoginApi(bool $releaseSession = false): void
 {
     authStartSession();
     if (!currentUser()) {
@@ -161,4 +167,5 @@ function requireLoginApi(): void
         echo json_encode(['ok' => false, 'error' => 'unauthenticated', 'msg' => 'نشست شما منقضی شده است، صفحه را رفرش کنید.'], JSON_UNESCAPED_UNICODE);
         exit;
     }
+    if ($releaseSession && session_status() === PHP_SESSION_ACTIVE) session_write_close();
 }
