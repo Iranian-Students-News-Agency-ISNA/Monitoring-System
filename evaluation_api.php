@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/helpers.php';
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/data.php';
-requireLoginApi();
+requireLoginApi(true);
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -103,8 +103,8 @@ switch ($action) {
         break;
 
     case 'overview':
-        $allRows = rowsInRange($from, $to, '', '', '', '', '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
-        $scopeRows = $service !== '' ? rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes) : $allRows;
+        $allRows = rowsInRange($from, $to, '', '', '', '', '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes, true);
+        $scopeRows = $service !== '' ? rowsInRange($from, $to, $service, '', '', '', '', $site, $keywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes, true) : $allRows;
         $totalAll = count($allRows);
         $totalScope = count($scopeRows);
         $sumViews = array_sum(array_column($scopeRows, 'views'));
@@ -218,10 +218,10 @@ switch ($action) {
             $targetTitle = $normTitle($isnaCov['title'] ?? '');
             $matched = null;
             if ($targetTitle !== '') {
-                $activeFileIds = excelActiveFileIds();
-                foreach (jsonRead('excel_rows') as $row) {
-                    if (!isset($activeFileIds[(int)($row['file_id'] ?? 0)])) continue;
-                    if (($row['site'] ?? '') !== 'ایسنا') continue;
+                $stm = exDb()->prepare("SELECT * FROM excel_rows WHERE site=? AND file_id IN (SELECT id FROM excel_files WHERE COALESCE(status,'active')='active') ORDER BY id");
+                $stm->execute(['ایسنا']);
+                foreach ($stm as $row) {
+                    $row = exOut($row);
                     if ($normTitle((string)($row['title'] ?? '')) === $targetTitle) { $matched = $row; break; }
                 }
             }
