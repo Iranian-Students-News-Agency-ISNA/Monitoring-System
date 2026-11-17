@@ -43,7 +43,7 @@ if (isset($_GET['ajax'])) {
                 if ($date !== '') $siteByDateCode[$date . '|' . $code] = $site;
             }
 
-            jsonUpdate('excel_rows', function ($all) use ($fileId, $siteByCode, &$updatedRows) {
+            excelRowsMutate( function ($all) use ($fileId, $siteByCode, &$updatedRows) {
                 foreach ($all as &$r) {
                     if ((int)($r['file_id'] ?? 0) !== $fileId) continue;
                     if (trim((string)($r['site'] ?? '')) !== '') continue;
