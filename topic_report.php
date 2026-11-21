@@ -15,6 +15,27 @@ $selectedRanges = array_values(array_intersect(
     array_column(viewsBuckets(), 'key')
 ));
 $services = excelRowsDistinctServicesInRange($from, $to);
+// فیلتر تعداد سطر مخصوص هر جدول/ماتریس (r_*) و تعداد موضوع هر نمودار ستونی (b_*)؛ خالی = پیش‌فرض
+$lim = fn(string $k, int $max = 5000): int => max(0, min($max, (int)($_GET[$k] ?? 0)));
+$L = ['topics' => $lim('r_topics'), 'ex' => $lim('r_ex'), 'svc_count' => $lim('r_svc_count'), 'svc_views' => $lim('r_svc_views'), 'type' => $lim('r_type'), 'range' => $lim('r_range')];
+$B = ['topic' => $lim('b_topic', 200) ?: 20, 'svc' => $lim('b_svc', 200) ?: 10, 'type' => $lim('b_type', 200) ?: 10, 'range' => $lim('b_range', 200) ?: 10];
+function limitForm(string $key, string $label, string $ph): void
+{
+    $cur = (int)($_GET[$key] ?? 0);
+    echo '<form method="get" action="topic_report.php#f_' . htmlspecialchars($key) . '" id="f_' . htmlspecialchars($key) . '" class="d-flex align-items-center gap-2 mb-2 small">';
+    hiddenParams([$key, 'export']);
+    echo '<label class="mb-0 text-muted">' . htmlspecialchars($label) . '</label>';
+    echo '<input type="number" min="0" max="5000" name="' . htmlspecialchars($key) . '" value="' . ($cur ?: '') . '" placeholder="' . htmlspecialchars($ph) . '" class="form-control form-control-sm" style="width:130px">';
+    echo '<button class="btn btn-sm btn-outline-primary py-0">اعمال</button></form>';
+}
+function hiddenParams(array $skip): void
+{
+    $walk = function ($v, string $name) use (&$walk) {
+        if (is_array($v)) { foreach ($v as $k => $x) $walk($x, $name . '[' . (is_int($k) ? '' : $k) . ']'); return; }
+        echo '<input type="hidden" name="' . htmlspecialchars($name) . '" value="' . htmlspecialchars((string)$v) . '">';
+    };
+    foreach ($_GET as $k => $v) { if (in_array($k, $skip, true)) continue; $walk($v, (string)$k); }
+}
 
 // تجمیع: مجموع بازدید و تعداد خبر برای هر موضوع (اخبار ایسنا با حداقل ۱۰۰۰ بازدید)
 $agg = [];
@@ -31,7 +52,7 @@ foreach (topicEvaluationRows($from, $to, $service, $selectedRanges) as $r) {
 }
 uasort($agg, fn($a, $b) => $b['views'] <=> $a['views']);
 $allTopics = $agg;
-$agg = array_slice($agg, 0, 20, true);
+$agg = array_slice($agg, 0, $B['topic'], true);
 
 // خروجی اکسل جدول موضوعات
 if (($_GET['export'] ?? '') === '1') {
@@ -132,22 +153,22 @@ function stackedBar(array $M, array $cols, int $topT = 10, int $topS = 6): array
     }
     return ['labels' => $topics, 'series' => $series];
 }
-function barSummary(array $M, array $cols, string $what): array
+function barSummary(array $M, array $cols, string $what, int $bT): array
 {
     $tot = []; $all = 0; $ct = [];
     foreach ($M as $t => $cells) { $tot[$t] = array_sum(array_column($cells, 'count')); $all += $tot[$t]; foreach ($cells as $c => $cell) $ct[$c] = ($ct[$c] ?? 0) + $cell['count']; }
     if ($all <= 0) return [];
     arsort($tot); arsort($ct);
-    $top10 = array_sum(array_slice($tot, 0, 10));
+    $top10 = array_sum(array_slice($tot, 0, $bT));
     $t1 = array_key_first($tot); $c1 = array_key_first($ct);
     return [
         'موضوع «' . htmlspecialchars($t1) . '» با ' . number_format($tot[$t1]) . ' خبر در صدر است و ' . $what . ' «' . htmlspecialchars($c1) . '» با ' . round($ct[$c1] / $all * 100) . '٪ سهم بیشترین حجم را دارد.',
-        '۱۰ موضوع برتر در مجموع ' . round($top10 / $all * 100) . '٪ از کل اخبار موضوع‌دار را پوشش می‌دهند.',
+        nfa($bT) . ' موضوع برتر در مجموع ' . round($top10 / $all * 100) . '٪ از کل اخبار موضوع‌دار را پوشش می‌دهند.',
     ];
 }
-$barSvc = stackedBar($mx, $svcCols);
-$barType = stackedBar($mt, $typeCols);
-$barRange = stackedBar($mr, $rangeCols, 10, 9);
+$barSvc = stackedBar($mx, $svcCols, $B['svc']);
+$barType = stackedBar($mt, $typeCols, $B['type']);
+$barRange = stackedBar($mr, $rangeCols, $B['range'], 9);
 
 // خروجی اکسل ماتریس‌ها: ?export=mx_svc_count | mx_svc_views | mx_type_count
 $mxExports = [
@@ -162,7 +183,7 @@ if (isset($_GET['export']) && isset($mxExports[$_GET['export']])) {
     foreach ($M as $t => $cells) $tot[$t] = array_sum(array_column($cells, $metric));
     arsort($tot);
     $dataRows = [];
-    foreach (array_slice(array_keys($tot), 0, 20) as $t) {
+    foreach (array_slice(array_keys($tot), 0, ['mx_svc_count' => $L['svc_count'], 'mx_svc_views' => $L['svc_views'], 'mx_type_count' => $L['type'], 'mx_range_count' => $L['range']][$_GET['export']] ?: 20) as $t) {
         $vals = [];
         foreach ($C as $c) $vals[] = (int)($M[$t][$c][$metric] ?? 0);
         $dataRows[] = [$t, $vals];
@@ -186,7 +207,7 @@ if (isset($_GET['export']) && isset($mxExports[$_GET['export']])) {
 }
 function mxXlsxBtn(string $key, string $from, string $to, string $service, array $ranges = []): void
 {
-    $q = htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'ranges' => $ranges, 'export' => $key]));
+    $q = htmlspecialchars(http_build_query(array_merge($_GET, ['export' => $key])));
     echo '<a class="btn btn-sm btn-outline-success py-0 px-2" title="خروجی اکسل ماتریس" href="topic_report.php?' . $q . '">اکسل</a>';
 }
 function pngBtn(string $canvasId, string $name): void
@@ -432,6 +453,7 @@ require __DIR__ . '/includes/layout_top.php';
   <?php if ($n === 0): ?>
     <div class="text-muted text-center py-4">در این بازه موضوعی ثبت نشده است.</div>
   <?php else: ?>
+    <?php limitForm('b_topic', 'تعداد موضوع در نمودار', 'پیش‌فرض ۲۰'); ?>
     <div class="text-end mb-1"><?php pngBtn('topicChart', 'نمودار_پربازدیدترین_موضوعات'); ?></div>
     <div style="position:relative; height:<?= max(260, $n * 34 + 60) ?>px"><canvas id="topicChart"></canvas></div>
     <?php if ($untagged > 0): ?>
@@ -442,15 +464,16 @@ require __DIR__ . '/includes/layout_top.php';
     <div class="d-flex justify-content-between align-items-center mt-4 mb-2">
       <h6 class="mb-0">جدول موضوعات</h6>
       <a class="btn btn-sm btn-outline-success d-inline-flex align-items-center p-1" title="خروجی اکسل"
-         href="topic_report.php?<?= htmlspecialchars(http_build_query(['from' => $from, 'to' => $to, 'service' => $service, 'ranges' => $selectedRanges, 'export' => 1])) ?>">
+         href="topic_report.php?<?= htmlspecialchars(http_build_query(array_merge($_GET, ['export' => 1]))) ?>">
         <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="2" width="18" height="20" rx="2.5" fill="#1d6f42"/><path d="M8 7.5l8 9M16 7.5l-8 9" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
       </a>
     </div>
+    <?php limitForm('r_topics', 'تعداد سطر', 'پیش‌فرض: همه'); ?>
     <div class="table-responsive">
       <table class="table table-sm table-bordered table-hover align-middle sortable-table">
         <thead><tr><th>#</th><th>موضوع</th><th>تعداد خبر</th><th>مجموع بازدید</th><th>میانگین بازدید</th></tr></thead>
         <tbody>
-          <?php $i = 0; foreach ($allTopics as $name => $a): $i++; ?>
+          <?php $i = 0; foreach (($L['topics'] ? array_slice($allTopics, 0, $L['topics'], true) : $allTopics) as $name => $a): $i++; ?>
             <tr>
               <td><?= $i ?></td>
               <td><?= htmlspecialchars($name) ?></td>
@@ -462,7 +485,7 @@ require __DIR__ . '/includes/layout_top.php';
         </tbody>
         <?php $sumC = array_sum(array_column($allTopics, 'count')); $sumV = array_sum(array_column($allTopics, 'views')); ?>
         <tfoot class="table-light fw-bold">
-          <tr><td></td><td>جمع</td><td><?= number_format($sumC) ?></td><td><?= number_format($sumV) ?></td><td><?= number_format((int)round($sumV / max(1, $sumC))) ?></td></tr>
+          <tr><td></td><td>جمع کل</td><td><?= number_format($sumC) ?></td><td><?= number_format($sumV) ?></td><td><?= number_format((int)round($sumV / max(1, $sumC))) ?></td></tr>
         </tfoot>
       </table>
     </div>
@@ -474,15 +497,16 @@ require __DIR__ . '/includes/layout_top.php';
         <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2" data-bs-toggle="modal" data-bs-target="#exModal">⚙ تعیین انواع غیراختصاصی</button>
       </div>
       <p class="text-muted small mb-2">غیراختصاصی: <?= $nonEx ? htmlspecialchars(implode('، ', $nonEx)) : '— (هیچ‌کدام)' ?> | سایر انواع خبر اختصاصی محسوب می‌شوند.</p>
+      <?php limitForm('r_ex', 'تعداد سطر', 'پیش‌فرض: همه'); ?>
       <div class="table-responsive">
         <table class="table table-sm table-bordered text-center align-middle mb-0">
           <thead style="background:#4f81bd;color:#fff"><tr><th class="text-white" style="background:#4f81bd">موضوع</th><th class="text-white" style="background:#4f81bd">اختصاصی</th><th class="text-white" style="background:#4f81bd">غیراختصاصی</th><th class="text-white" style="background:#4f81bd">جمع</th></tr></thead>
           <tbody>
-            <?php foreach ($exRows as $t => [$e, $ne]): ?>
+            <?php foreach (($L['ex'] ? array_slice($exRows, 0, $L['ex'], true) : $exRows) as $t => [$e, $ne]): ?>
               <tr><th class="fw-bold"><?= htmlspecialchars($t) ?></th><td><?= number_format($e) ?></td><td><?= number_format($ne) ?></td><td class="fw-bold"><?= number_format($e + $ne) ?></td></tr>
             <?php endforeach; ?>
           </tbody>
-          <tfoot class="table-light fw-bold"><tr><td>جمع</td><td><?= number_format($exSumE) ?></td><td><?= number_format($exSumN) ?></td><td><?= number_format($exSumE + $exSumN) ?></td></tr></tfoot>
+          <tfoot class="table-light fw-bold"><tr><td>جمع کل</td><td><?= number_format($exSumE) ?></td><td><?= number_format($exSumN) ?></td><td><?= number_format($exSumE + $exSumN) ?></td></tr></tfoot>
         </table>
       </div>
       <?php
@@ -504,10 +528,7 @@ require __DIR__ . '/includes/layout_top.php';
             <div class="modal-header"><h6 class="modal-title">انواع خبر غیراختصاصی</h6><button type="button" class="btn-close ms-0 me-auto" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
               <p class="text-muted small">انواع خبر موجود در بازهٔ انتخابی؛ موارد تیک‌خورده «غیراختصاصی» و بقیه «اختصاصی» حساب می‌شوند.</p>
-              <input type="hidden" name="from" value="<?= htmlspecialchars($from) ?>">
-              <input type="hidden" name="to" value="<?= htmlspecialchars($to) ?>">
-              <input type="hidden" name="service" value="<?= htmlspecialchars($service) ?>">
-              <?php foreach ($selectedRanges as $rg): ?><input type="hidden" name="ranges[]" value="<?= htmlspecialchars($rg) ?>"><?php endforeach; ?>
+              <?php hiddenParams(['nonex', 'nonex_set', 'export']); ?>
               <input type="hidden" name="nonex_set" value="1">
               <?php foreach ($typeCols as $i => $tc): ?>
                 <div class="form-check">
@@ -524,18 +545,19 @@ require __DIR__ . '/includes/layout_top.php';
 
     <?php if ($svcCols): ?>
       <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × سرویس: تعداد خبر</h6><?php mxXlsxBtn('mx_svc_count', $from, $to, $service, $selectedRanges); ?></div>
-      <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (۲۰ موضوع پرخبر؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس).</p>
-      <?php matrixRender($mx, $svcCols, 'count'); narrBox(narrMxCount($mx, $svcCols)); ?>
+      <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (سطرهای برتر از نظر تعداد خبر؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس).</p>
+      <?php limitForm('r_svc_count', 'تعداد سطر', 'پیش‌فرض ۲۰'); matrixRender($mx, $svcCols, 'count', $L['svc_count'] ?: 20); narrBox(narrMxCount($mx, $svcCols)); ?>
 
       <?php if ($barSvc['series']): ?>
-        <div class="d-flex justify-content-between align-items-center mt-3 mb-1"><h6 class="mb-0">نمودار ستونی موضوع × سرویس (۱۰ موضوع پرخبر)</h6><?php pngBtn('svcBar', 'نمودار_ستونی_موضوع_سرویس'); ?></div>
-        <div style="position:relative;height:340px"><canvas id="svcBar"></canvas></div>
-        <?php narrBox(array_merge(['<strong>جمع‌بندی:</strong>'], barSummary($mx, $svcCols, 'سرویس'))); ?>
+        <div class="d-flex justify-content-between align-items-center mt-3 mb-1"><h6 class="mb-0">نمودار ستونی موضوع × سرویس (<?= $B['svc'] ?> موضوع پرخبر)</h6><?php pngBtn('svcBar', 'نمودار_ستونی_موضوع_سرویس'); ?></div>
+        <?php limitForm('b_svc', 'تعداد موضوع در نمودار', 'پیش‌فرض ۱۰'); ?>
+        <div style="overflow-x:auto"><div style="position:relative;height:340px;min-width:<?= max(0, $B['svc'] * 45) ?>px"><canvas id="svcBar"></canvas></div></div>
+        <?php narrBox(array_merge(['<strong>جمع‌بندی:</strong>'], barSummary($mx, $svcCols, 'سرویس', $B['svc']))); ?>
       <?php endif; ?>
 
       <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × سرویس: مجموع بازدید</h6><?php mxXlsxBtn('mx_svc_views', $from, $to, $service, $selectedRanges); ?></div>
-      <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، مجموع بازدید بیشتر (۲۰ موضوع پربازدید؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس).</p>
-      <?php matrixRender($mx, $svcCols, 'views'); narrBox(narrMxViews($mx, $svcCols)); ?>
+      <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، مجموع بازدید بیشتر (سطرهای برتر از نظر بازدید؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس).</p>
+      <?php limitForm('r_svc_views', 'تعداد سطر', 'پیش‌فرض ۲۰'); matrixRender($mx, $svcCols, 'views', $L['svc_views'] ?: 20); narrBox(narrMxViews($mx, $svcCols)); ?>
 
       <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">نمودار حبابی موضوع × سرویس</h6><?php pngBtn('bubbleChart', 'نمودار_حبابی_موضوع_سرویس'); ?></div>
       <p class="text-muted small mb-2">اندازهٔ حباب = تعداد خبر، رنگ سبز (پررنگ = بازدید بیشتر) = مجموع بازدید (۲۰ موضوع پربازدید).</p>
@@ -543,23 +565,25 @@ require __DIR__ . '/includes/layout_top.php';
       <?php narrBox(narrBubble($bPoints, $bTopics, $svcCols, (int)$bMaxC, (int)$bMaxV)); ?>
 
       <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × نوع خبر: تعداد خبر</h6><?php mxXlsxBtn('mx_type_count', $from, $to, $service, $selectedRanges); ?></div>
-      <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (۲۰ موضوع پرخبر؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس). با نگه داشتن ماوس روی هر خانه، مجموع بازدید هم دیده می‌شود.</p>
-      <?php matrixRender($mt, $typeCols, 'count'); narrBox(narrMxType($mt, $typeCols)); ?>
+      <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (سطرهای برتر از نظر تعداد خبر؛ همهٔ سرویس‌ها، مستقل از فیلتر سرویس). با نگه داشتن ماوس روی هر خانه، مجموع بازدید هم دیده می‌شود.</p>
+      <?php limitForm('r_type', 'تعداد سطر', 'پیش‌فرض ۲۰'); matrixRender($mt, $typeCols, 'count', $L['type'] ?: 20); narrBox(narrMxType($mt, $typeCols)); ?>
 
       <?php if ($barType['series']): ?>
-        <div class="d-flex justify-content-between align-items-center mt-3 mb-1"><h6 class="mb-0">نمودار ستونی موضوع × نوع خبر (۱۰ موضوع پرخبر)</h6><?php pngBtn('typeBar', 'نمودار_ستونی_موضوع_نوع_خبر'); ?></div>
-        <div style="position:relative;height:340px"><canvas id="typeBar"></canvas></div>
-        <?php narrBox(array_merge(['<strong>جمع‌بندی:</strong>'], barSummary($mt, $typeCols, 'نوع'))); ?>
+        <div class="d-flex justify-content-between align-items-center mt-3 mb-1"><h6 class="mb-0">نمودار ستونی موضوع × نوع خبر (<?= $B['type'] ?> موضوع پرخبر)</h6><?php pngBtn('typeBar', 'نمودار_ستونی_موضوع_نوع_خبر'); ?></div>
+        <?php limitForm('b_type', 'تعداد موضوع در نمودار', 'پیش‌فرض ۱۰'); ?>
+        <div style="overflow-x:auto"><div style="position:relative;height:340px;min-width:<?= max(0, $B['type'] * 45) ?>px"><canvas id="typeBar"></canvas></div></div>
+        <?php narrBox(array_merge(['<strong>جمع‌بندی:</strong>'], barSummary($mt, $typeCols, 'نوع', $B['type']))); ?>
       <?php endif; ?>
 
       <?php if ($rangeCols): ?>
         <div class="d-flex justify-content-between align-items-center mt-4 mb-1"><h6 class="mb-0">ماتریس موضوع × محدوده بازدید: تعداد خبر</h6><?php mxXlsxBtn('mx_range_count', $from, $to, $service, $selectedRanges); ?></div>
-        <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (۲۰ موضوع پرخبر؛ همهٔ سرویس‌ها). با نگه داشتن ماوس روی هر خانه، مجموع بازدید هم دیده می‌شود.</p>
-        <?php matrixRender($mr, $rangeCols, 'count'); ?>
+        <p class="text-muted small mb-2">هر چه سبز پررنگ‌تر، تعداد خبر بیشتر (سطرهای برتر از نظر تعداد خبر؛ همهٔ سرویس‌ها). با نگه داشتن ماوس روی هر خانه، مجموع بازدید هم دیده می‌شود.</p>
+        <?php limitForm('r_range', 'تعداد سطر', 'پیش‌فرض ۲۰'); matrixRender($mr, $rangeCols, 'count', $L['range'] ?: 20); ?>
         <?php if ($barRange['series']): ?>
-          <div class="d-flex justify-content-between align-items-center mt-3 mb-1"><h6 class="mb-0">نمودار ستونی موضوع × محدوده بازدید (۱۰ موضوع پرخبر)</h6><?php pngBtn('rangeBar', 'نمودار_ستونی_موضوع_محدوده_بازدید'); ?></div>
-          <div style="position:relative;height:340px"><canvas id="rangeBar"></canvas></div>
-          <?php narrBox(array_merge(['<strong>جمع‌بندی:</strong>'], barSummary($mr, $rangeCols, 'محدودهٔ'))); ?>
+          <div class="d-flex justify-content-between align-items-center mt-3 mb-1"><h6 class="mb-0">نمودار ستونی موضوع × محدوده بازدید (<?= $B['range'] ?> موضوع پرخبر)</h6><?php pngBtn('rangeBar', 'نمودار_ستونی_موضوع_محدوده_بازدید'); ?></div>
+          <?php limitForm('b_range', 'تعداد موضوع در نمودار', 'پیش‌فرض ۱۰'); ?>
+        <div style="overflow-x:auto"><div style="position:relative;height:340px;min-width:<?= max(0, $B['range'] * 45) ?>px"><canvas id="rangeBar"></canvas></div></div>
+          <?php narrBox(array_merge(['<strong>جمع‌بندی:</strong>'], barSummary($mr, $rangeCols, 'محدودهٔ', $B['range']))); ?>
         <?php endif; ?>
       <?php endif; ?>
     <?php endif; ?>
