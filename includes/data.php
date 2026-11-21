@@ -1,23 +1,21 @@
 <?php
 require_once __DIR__ . '/jsondb.php';
+require_once __DIR__ . '/sqlite.php';
 
-// ===================== excel_files =====================
+// ===================== excel_files (SQLite) =====================
 
 function excelFilesAll(): array
 {
-    return jsonRead('excel_files');
+    return array_map('exOut', exDb()->query('SELECT * FROM excel_files ORDER BY id')->fetchAll());
 }
 
 function excelFilesActiveDates(): array
 {
-    $activeFileIds = excelActiveFileIds();
+    $st = exDb()->query("SELECT DISTINCT date FROM excel_rows WHERE date<>'' AND file_id IN (SELECT id FROM excel_files WHERE COALESCE(status,'active')='active')");
     $dates = [];
-    if (!empty($activeFileIds)) {
-        foreach (jsonRead('excel_rows') as $r) {
-            if (!isset($activeFileIds[(int)($r['file_id'] ?? 0)])) continue;
-            $d = normalizeJalaliDate((string)($r['date'] ?? ''));
-            if ($d !== null) $dates[$d] = true;
-        }
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $d0) {
+        $d = normalizeJalaliDate((string)$d0);
+        if ($d !== null) $dates[$d] = true;
     }
     $dates = array_keys($dates);
     rsort($dates);
@@ -26,73 +24,70 @@ function excelFilesActiveDates(): array
 
 function excelFileInsert(array $fields): int
 {
-    $newId = 0;
-    jsonUpdate('excel_files', function ($rows) use ($fields, &$newId) {
-        $newId = jsonNextId($rows);
-        $fields['id'] = $newId;
-        $rows[] = $fields;
-        return $rows;
-    });
-    return $newId;
+    $pdo = exDb();
+    $fields['id'] = null;
+    exInsertFile($pdo->prepare(exFileInsertSql()), $fields);
+    return (int)$pdo->lastInsertId();
 }
 
 function excelFileUpdate(int $id, array $fields): void
 {
-    jsonUpdate('excel_files', function ($rows) use ($id, $fields) {
-        foreach ($rows as &$r) {
-            if ((int)$r['id'] === $id) { $r = array_merge($r, $fields); break; }
-        }
-        return $rows;
-    });
+    $cur = excelFileGet($id);
+    if (!$cur) return;
+    $m = array_merge($cur, $fields);
+    $pdo = exDb();
+    $pdo->prepare('DELETE FROM excel_files WHERE id=?')->execute([$id]);
+    exInsertFile($pdo->prepare(exFileInsertSql()), $m);
 }
 
 function excelFileGet(int $id): ?array
 {
-    foreach (excelFilesAll() as $f) { if ((int)$f['id'] === $id) return $f; }
-    return null;
+    $st = exDb()->prepare('SELECT * FROM excel_files WHERE id=?');
+    $st->execute([$id]);
+    $r = $st->fetch();
+    return $r ? exOut($r) : null;
 }
 
 function excelFileRowCount(int $fileId): int
 {
-    $n = 0;
-    foreach (jsonRead('excel_rows') as $r) { if ((int)($r['file_id'] ?? 0) === $fileId) $n++; }
-    return $n;
+    $st = exDb()->prepare('SELECT COUNT(*) FROM excel_rows WHERE file_id=?');
+    $st->execute([$fileId]);
+    return (int)$st->fetchColumn();
 }
 
-// ===================== excel_rows =====================
+// ===================== excel_rows (SQLite) =====================
 
 function excelRowsInsertMany(int $fileId, array $rows): void
 {
-    jsonUpdate('excel_rows', function ($existing) use ($fileId, $rows) {
+    $pdo = exDb();
+    $pdo->beginTransaction();
+    try {
+        $st = $pdo->prepare(exRowInsertSql());
         foreach ($rows as $row) {
             $row['file_id'] = $fileId;
-            $existing[] = $row;
+            $row['id'] = null;
+            exInsertRow($st, $row);
         }
-        return $existing;
-    });
+        $pdo->commit();
+    } catch (Throwable $e) { $pdo->rollBack(); throw $e; }
 }
 
 function excelRowsDeleteByFile(int $fileId): void
 {
-    jsonUpdate('excel_rows', function ($rows) use ($fileId) {
-        return array_values(array_filter($rows, fn($r) => (int)($r['file_id'] ?? 0) !== $fileId));
-    });
+    exDb()->prepare('DELETE FROM excel_rows WHERE file_id=?')->execute([$fileId]);
 }
 
 // جست‌وجوی یک ردیف اکسل با تاریخِ خودِ ردیف + کد خبر، در میان همه فایل‌های فعال
-// (نه فقط فایل‌هایی که تاریخ فایلشان با این تاریخ برابر است - چون یک فایل می‌تواند چند روز را شامل شود)
 function excelRowFind(string $date, string $code, string $site = ''): ?array
 {
     $date = normalizeJalaliDate($date) ?? $date;
     $code = normalizeDigits(trim($code));
-    $activeFileIds = excelActiveFileIds();
-    if (empty($activeFileIds)) return null;
-    foreach (jsonRead('excel_rows') as $r) {
-        if (!isset($activeFileIds[(int)($r['file_id'] ?? 0)])) continue;
-        if (trim((string)($r['date'] ?? '')) !== $date) continue;
-        if (normalizeDigits((string)($r['code'] ?? '')) !== $code) continue;
-        if ($site !== '' && trim((string)($r['site'] ?? '')) !== $site) continue;
-        return $r;
+    $st = exDb()->prepare("SELECT * FROM excel_rows WHERE date=? AND file_id IN (SELECT id FROM excel_files WHERE COALESCE(status,'active')='active') ORDER BY id");
+    $st->execute([$date]);
+    foreach ($st as $r) {
+        if (normalizeDigits((string)$r['code']) !== $code) continue;
+        if ($site !== '' && trim((string)$r['site']) !== $site) continue;
+        return exOut($r);
     }
     return null;
 }
@@ -114,19 +109,18 @@ function excelActiveFileIds(): array
 // به همین دلیل فایلی که چند روز را در بر می‌گیرد و همچنین ترکیب چند فایل مختلف در یک بازه، هر دو درست کار می‌کنند.
 function excelRowsInRange(string $from, string $to, string $service = '', string $reporter = ''): array
 {
-    $activeFileIds = excelActiveFileIds();
-    if (empty($activeFileIds)) return [];
+    $sql = "SELECT * FROM excel_rows WHERE date<>'' AND date>=? AND date<=? AND TRIM(reporter)<>'' AND file_id IN (SELECT id FROM excel_files WHERE COALESCE(status,'active')='active')";
+    $args = [$from, $to];
+    if ($service !== '') { $sql .= ' AND service_main=?'; $args[] = $service; }
+    $st = exDb()->prepare($sql . ' ORDER BY id');
+    $st->execute($args);
     $out = [];
-    foreach (jsonRead('excel_rows') as $r) {
-        if (!isset($activeFileIds[(int)($r['file_id'] ?? 0)])) continue;
-        $d = trim((string)($r['date'] ?? ''));
-        if ($d === '' || $d < $from || $d > $to) continue;
+    foreach ($st as $r) {
+        $r = exOut($r);
         $rep = trim((string)($r['reporter'] ?? ''));
-        if ($rep === '') continue;
-        if ($service !== '' && ($r['service_main'] ?? '') !== $service) continue;
         if ($reporter !== '' && $rep !== $reporter) continue;
         $r['reporter'] = $rep;
-        $r['entry_date'] = $d;
+        $r['entry_date'] = trim((string)$r['date']);
         $out[] = $r;
     }
     usort($out, fn($a, $b) => ($a['entry_date'] <=> $b['entry_date']) ?: strcmp((string)($a['code'] ?? ''), (string)($b['code'] ?? '')));
@@ -357,36 +351,55 @@ function advFiltersMatch(array $r, array $advReporters, array $advPublishers, ar
     return true;
 }
 
-function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and', array $timePeriods = [], array $advReporters = [], array $advPublishers = [], array $advNewsTypes = []): array
+function evalWhere(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = '', array $kws = [], string $kwMode = 'and', array $timePeriods = [], array $advReporters = [], array $advPublishers = [], array $advNewsTypes = []): array
 {
-    $activeFileIds = excelActiveFileIds();
-    if (empty($activeFileIds)) return [];
-    $kws = array_values(array_filter(array_map('trim', $titleKeywords), fn($w) => $w !== ''));
-    $tps = array_values(array_intersect($timePeriods, TIME_PERIOD_LABELS));
-    $out = [];
-    foreach (jsonRead('excel_rows') as $r) {
-        if (!isset($activeFileIds[(int)($r['file_id'] ?? 0)])) continue;
-        $d = trim((string)($r['date'] ?? ''));
-        if ($d === '' || $d < $from || $d > $to) continue;
-        $title = trim((string)($r['title'] ?? ''));
-        if ($title === '') continue;
-        if ($site !== '' && ($r['site'] ?? '') !== $site) continue;
-        if (!serviceFilterMatches($service, (string)($r['service_main'] ?? ''))) continue;
-        if ($subservice !== '' && ($r['service_sub'] ?? '') !== $subservice) continue;
-        if ($role !== '' && $name !== '') {
-            $field = $role === 'publisher' ? 'publisher' : 'reporter';
-            if (trim((string)($r[$field] ?? '')) !== $name) continue;
-        }
-        if ($newsType !== '' && ($r['news_type'] ?? '') !== $newsType) continue;
-        if (!empty($kws) && !titleMatchesKeywords($title, $kws, $keywordMode)) continue;
-        if (!empty($tps) && !in_array(rowTimePeriod((string)($r['pub_time'] ?? '')), $tps, true)) continue;
-        if (!advFiltersMatch($r, $advReporters, $advPublishers, $advNewsTypes)) continue;
-        $out[] = $r;
+    // «+file_id» مانع انتخاب ایندکس file_id می‌شود تا SQLite از ایندکس تاریخ استفاده کند
+    $w = ["date >= ?", "date <= ?", "TRIM(title) <> ''", "+file_id IN (SELECT id FROM excel_files WHERE COALESCE(status,'active')='active')"];
+    $p = [$from, $to];
+    $in = function (string $col, array $vals, bool $trim = true) use (&$w, &$p) {
+        $vals = array_values(array_filter($trim ? array_map('trim', $vals) : $vals, fn($v) => $v !== ''));
+        if (!$vals) return;
+        $w[] = ($trim ? "TRIM($col)" : $col) . " IN (" . implode(',', array_fill(0, count($vals), '?')) . ")";
+        foreach ($vals as $v) $p[] = $v;
+    };
+    if ($site !== '') { $w[] = 'site = ?'; $p[] = $site; }
+    if ($service !== '') $in('service_main', explode(',', $service), false);
+    if ($subservice !== '') { $w[] = 'service_sub = ?'; $p[] = $subservice; }
+    if ($role !== '' && $name !== '') { $w[] = 'TRIM(' . ($role === 'publisher' ? 'publisher' : 'reporter') . ') = ?'; $p[] = $name; }
+    if ($newsType !== '') { $w[] = 'news_type = ?'; $p[] = $newsType; }
+    $in('reporter', $advReporters); $in('publisher', $advPublishers); $in('news_type', $advNewsTypes);
+    $kws = array_values(array_filter(array_map('trim', $kws), fn($x) => $x !== ''));
+    if ($kws) {
+        $parts = [];
+        foreach ($kws as $k) { $parts[] = "title LIKE ? ESCAPE '\\'"; $p[] = '%' . addcslashes($k, '%_\\') . '%'; }
+        $w[] = '(' . implode($kwMode === 'or' ? ' OR ' : ' AND ', $parts) . ')';
     }
-    return $out;
+    $tps = array_values(array_intersect($timePeriods, TIME_PERIOD_LABELS));
+    if ($tps) {
+        $bd = timePeriodBoundaries(); $parts = [];
+        foreach ($tps as $l) { $parts[] = '(pub_min >= ? AND pub_min <= ?)'; $p[] = $bd[$l][0]; $p[] = $bd[$l][1]; }
+        $w[] = '(' . implode(' OR ', $parts) . ')';
+    }
+    return [implode(' AND ', $w), $p];
 }
 
-// بررسی می‌کند تیتر با مجموعه کلمات/عبارات کاربر مطابقت دارد یا نه (mode: 'and' یا 'or')
+function rowsInRange(string $from, string $to, string $service = '', string $role = '', string $name = '', string $newsType = '', string $subservice = '', string $site = '', array $titleKeywords = [], string $keywordMode = 'and', array $timePeriods = [], array $advReporters = [], array $advPublishers = [], array $advNewsTypes = [], bool $light = false): array
+{
+    static $memo = [];
+    $key = md5(serialize(func_get_args()));
+    if (isset($memo[$key])) return $memo[$key];
+    [$w, $p] = evalWhere($from, $to, $service, $role, $name, $newsType, $subservice, $site, $titleKeywords, $keywordMode, $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
+    // حالت سبک: بدون ستون‌های سنگین (تیتر/لینک) برای آمار تجمیعی
+    $cols = $light ? 'news_type,reporter,publisher,service_main,service_sub,date,pub_time,views'
+                   : 'id,file_id,code,site,publisher,title,news_type,reporter,service_main,service_sub,date,pub_time,views,news_link,source';
+    $st = exDb()->prepare("SELECT $cols FROM excel_rows WHERE $w ORDER BY date, id");
+    $st->execute($p);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) $r['views'] = (int)$r['views'];
+    unset($r);
+    return $memo[$key] = $rows;
+}
+
 function titleMatchesKeywords(string $title, array $kws, string $mode): bool
 {
     if ($mode === 'or') {
@@ -403,12 +416,11 @@ function titleMatchesKeywords(string $title, array $kws, string $mode): bool
 
 function distinctValuesInRange(string $from, string $to, string $field, string $service = '', string $site = '', array $timePeriods = [], array $advReporters = [], array $advPublishers = [], array $advNewsTypes = []): array
 {
-    $set = [];
-    foreach (rowsInRange($from, $to, $service, '', '', '', '', $site, [], 'and', $timePeriods, $advReporters, $advPublishers, $advNewsTypes) as $r) {
-        $v = trim((string)($r[$field] ?? ''));
-        if ($v !== '') $set[$v] = true;
-    }
-    $list = array_keys($set);
+    if (!in_array($field, ['site', 'service_main', 'service_sub', 'news_type', 'reporter', 'publisher'], true)) return [];
+    [$w, $p] = evalWhere($from, $to, $service, '', '', '', '', $site, [], 'and', $timePeriods, $advReporters, $advPublishers, $advNewsTypes);
+    $st = exDb()->prepare("SELECT DISTINCT TRIM($field) AS v FROM excel_rows WHERE $w AND TRIM($field) <> ''");
+    $st->execute($p);
+    $list = $st->fetchAll(PDO::FETCH_COLUMN);
     sort($list, SORT_FLAG_CASE | SORT_STRING);
     return $list;
 }
@@ -416,11 +428,11 @@ function distinctValuesInRange(string $from, string $to, string $field, string $
 // گروه‌بندی سری زمانی: تعداد خبر + میانگین بازدید به تفکیک روز یا ماه
 function buildSeries(array $rows, string $granularity): array
 {
-    $buckets = [];
+    $buckets = []; $normCache = [];
     foreach ($rows as $r) {
         $d = (string)($r['date'] ?? '');
-        $norm = normalizeJalaliDate($d);
-        if (!$norm) continue;
+        $norm = $normCache[$d] ??= (normalizeJalaliDate($d) ?: '');
+        if ($norm === '') continue;
         $period = $granularity === 'month' ? substr($norm, 0, 7) : $norm;
         if (!isset($buckets[$period])) $buckets[$period] = ['count' => 0, 'views' => 0];
         $buckets[$period]['count']++;
@@ -566,8 +578,11 @@ function buildHourlySeries(array $rows): array
 
 function topViewedNews(array $rows, int $limit): array
 {
-    usort($rows, fn($a, $b) => (int)($b['views'] ?? 0) <=> (int)($a['views'] ?? 0));
-    $rows = array_slice($rows, 0, $limit);
+    $v = array_column($rows, 'views');
+    arsort($v);
+    $top = [];
+    foreach (array_slice(array_keys($v), 0, $limit) as $k) $top[] = $rows[$k];
+    $rows = $top;
     $out = [];
     foreach ($rows as $r) {
         $out[] = ['title' => $r['title'] ?? '', 'reporter' => $r['reporter'] ?? '', 'publisher' => $r['publisher'] ?? '',
@@ -718,15 +733,13 @@ function excelViewsIndex(): array
 {
     static $index = null;
     if ($index !== null) return $index;
-    $activeFileIds = excelActiveFileIds();
     $index = [];
-    if (empty($activeFileIds)) return $index;
-    foreach (jsonRead('excel_rows') as $r) {
-        if (!isset($activeFileIds[(int)($r['file_id'] ?? 0)])) continue;
-        $d = trim((string)($r['date'] ?? ''));
-        $c = normalizeDigits(trim((string)($r['code'] ?? '')));
+    $st = exDb()->query("SELECT date, code, views FROM excel_rows WHERE date<>'' AND code<>'' AND file_id IN (SELECT id FROM excel_files WHERE COALESCE(status,'active')='active') ORDER BY id");
+    foreach ($st as $r) {
+        $d = trim((string)$r['date']);
+        $c = normalizeDigits(trim((string)$r['code']));
         if ($d === '' || $c === '') continue;
-        $index[$d . '|' . $c] = (int)($r['views'] ?? 0);
+        $index[$d . '|' . $c] = (int)$r['views'];
     }
     return $index;
 }
